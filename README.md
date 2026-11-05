@@ -12,7 +12,7 @@ Built as a single-page, dependency-light web application utilizing **D3.js** for
 - **Interactive FP-Tree (D3.js):** Full zoom, pan, and dynamic node highlighting with support for transaction step-throughs.
 - **Reverse Rule-to-Tree Back-Tracing:** Click any derived association rule ($A \Rightarrow B$) to trace its exact conditional pattern base path directly on the FP-Tree (nodes dynamically turn blue with highlighted links).
 - **Step-by-Step Mathematical Derivation:** Detailed modal breakdowns for Rule Support, Confidence, and Lift calculations with explicit fractional substitutions.
-- **Dynamic Dataset Controls:** Adjust Minimum Support ($\text{min\_sup}$), Minimum Confidence ($\text{min\_conf}$), switch between retail presets, or build/edit custom transaction databases on the fly.
+- **Dynamic Dataset Controls:** Adjust Minimum Support (`min_sup`), Minimum Confidence (`min_conf`), switch between retail presets, or build/edit custom transaction databases on the fly.
 - **Telemetry & Complexity Audit:** Real-time metrics tracking database scans, candidate counts, and computational overhead.
 
 ---
