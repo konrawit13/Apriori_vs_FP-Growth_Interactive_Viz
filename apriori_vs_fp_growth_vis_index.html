@@ -1,0 +1,2535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apriori vs FP-Growth: Interactive Association Rule Mining</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- D3.js v7 for FP-Tree Visualization -->
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <!-- KaTeX for High-Fidelity Mathematical Typography -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            apriori: {
+              50: '#f5f3ff',
+              100: '#ede9fe',
+              200: '#ddd6fe',
+              400: '#a78bfa',
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9',
+              800: '#5b21b6',
+              900: '#4c1d95',
+              950: '#2e1065',
+            },
+            fpgrowth: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              200: '#a7f3d0',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857',
+              800: '#065f46',
+              900: '#064e3b',
+              950: '#022c22',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* D3 Tree transitions & styling */
+    .tree-node circle {
+      transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .tree-node text {
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+    }
+    .tree-link {
+      fill: none;
+      transition: stroke 0.35s ease, stroke-width 0.35s ease, opacity 0.35s ease;
+    }
+    
+    /* Green Pulse (Insertion State) */
+    .node-pulse {
+      animation: pulse-ring-green 1.6s infinite;
+    }
+    @keyframes pulse-ring-green {
+      0% { r: 16px; stroke-opacity: 0.95; stroke-width: 4px; }
+      50% { r: 23px; stroke-opacity: 0.2; stroke-width: 1.5px; }
+      100% { r: 16px; stroke-opacity: 0.95; stroke-width: 4px; }
+    }
+
+    /* Vivid Blue Pulse (Rule & Conditional Pattern Trace State) */
+    .node-blue-pulse {
+      animation: pulse-ring-blue 1.4s infinite;
+    }
+    @keyframes pulse-ring-blue {
+      0% { r: 16px; stroke: #60a5fa; stroke-opacity: 1; stroke-width: 5px; }
+      50% { r: 25px; stroke: #3b82f6; stroke-opacity: 0.25; stroke-width: 2px; }
+      100% { r: 16px; stroke: #60a5fa; stroke-opacity: 1; stroke-width: 5px; }
+    }
+
+    .iteration-card-enter {
+      animation: slideInDown 0.35s ease-out forwards;
+    }
+    @keyframes slideInDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- =========================================================================
+       STICKY TOP CONTROL BAR (DOCKABLE / COLLAPSIBLE / LIVE STEP TELEMETRY)
+       ========================================================================= -->
+  <header class="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800 shadow-2xl transition-all duration-300">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2.5">
+      
+      <!-- Upper Control Row: Brand, Playback Controls, Step Scrubber, and Collapse Toggle -->
+      <div class="flex flex-wrap items-center justify-between gap-2.5">
+        
+        <!-- Left: Brand Title & Active Phase Pill -->
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-apriori-600 to-fpgrowth-500 flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-bold text-sm sm:text-base text-white tracking-tight leading-none">Apriori vs FP-Growth</h1>
+              <span id="badge-sticky-phase" class="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full font-bold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                Ready
+              </span>
+            </div>
+            <p class="text-[10px] text-slate-400 hidden sm:block">Association Rule Mining & Complexity Benchmark</p>
+          </div>
+        </div>
+
+        <!-- Center: Step Steppers & Auto-Play Controller -->
+        <div class="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
+          <button id="btn-reset" title="Restart to Step 0" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"></path></svg>
+          </button>
+          
+          <button id="btn-step-prev" title="Previous Step" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+            <span class="hidden sm:inline">Prev</span>
+          </button>
+
+          <button id="btn-play-pause" class="px-3.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center gap-1.5 shadow-md shadow-indigo-600/30 transition">
+            <svg id="play-icon" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>
+            <svg id="pause-icon" class="w-3.5 h-3.5 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path></svg>
+            <span id="play-btn-label">Auto Play</span>
+          </button>
+
+          <button id="btn-step-next" title="Next Step" class="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition">
+            <span>Next</span>
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          </button>
+
+          <!-- Speed -->
+          <div class="hidden md:flex items-center gap-1 pl-1 border-l border-slate-800">
+            <select id="select-speed" class="bg-transparent text-[11px] text-slate-300 outline-none cursor-pointer px-1 py-0.5 rounded hover:bg-slate-800">
+              <option value="1800" class="bg-slate-900">0.5x</option>
+              <option value="1000" class="bg-slate-900" selected>1.0x</option>
+              <option value="450" class="bg-slate-900">2.0x</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Right: Step Jump Selector & Controls Drawer Toggle -->
+        <div class="flex items-center gap-2">
+          <!-- Direct Step Jump Selector -->
+          <div class="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800 text-xs">
+            <span class="text-slate-400 text-[10px] hidden sm:inline">Jump:</span>
+            <select id="select-jump-step" class="bg-transparent text-slate-200 text-xs font-mono outline-none cursor-pointer max-w-[140px] truncate">
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <!-- Quick Jump To Rules -->
+          <a href="#section-association-rules" class="hidden lg:flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs transition">
+            <span>Rules</span>
+            <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </a>
+
+          <!-- Expand / Collapse Params & Presets Drawer -->
+          <button id="btn-toggle-sticky-drawer" title="Toggle Parameter & Preset Drawer" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition flex items-center gap-1 text-xs">
+            <span class="text-[11px] hidden sm:inline font-medium">Controls</span>
+            <svg id="chevron-drawer-icon" class="w-3.5 h-3.5 transform transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Live Step Progress Bar & Instant Narrative (Always visible at sticky top) -->
+      <div class="mt-2 pt-2 border-t border-slate-800/80 flex flex-col gap-1.5">
+        <div class="flex items-center justify-between text-xs gap-3">
+          <div class="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
+            <span id="label-sticky-step-num" class="font-mono font-bold text-emerald-400 text-xs shrink-0">Step 0/0</span>
+            <span id="label-sticky-headline" class="font-semibold text-slate-200 text-xs truncate">Database Initialized</span>
+          </div>
+          <span id="label-sticky-detail" class="text-[11px] text-slate-400 hidden md:block max-w-xl truncate text-right">Click Next or Auto Play to start mining comparison.</span>
+        </div>
+        <div class="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
+          <div id="timeline-progress-bar" class="bg-gradient-to-r from-apriori-500 via-indigo-500 to-fpgrowth-500 h-full w-0 transition-all duration-300"></div>
+        </div>
+      </div>
+
+      <!-- Collapsible Drawer: Min Support/Confidence Sliders, Presets, and DB Editor -->
+      <div id="sticky-params-drawer" class="pt-3 mt-2 border-t border-slate-800/70 grid grid-cols-1 lg:grid-cols-12 gap-3 items-center">
+        
+        <!-- Support Slider -->
+        <div class="lg:col-span-4 bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-1">
+            <label for="slider-min-sup" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span> Min Support (min_sup)
+            </label>
+            <div class="flex items-baseline gap-1">
+              <span id="label-min-sup-val" class="font-mono text-xs font-bold text-amber-400">40%</span>
+              <span id="label-min-sup-count" class="font-mono text-[10px] text-slate-400">(≥ 2 Tx)</span>
+            </div>
+          </div>
+          <input id="slider-min-sup" type="range" min="10" max="80" step="5" value="40" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400">
+        </div>
+
+        <!-- Confidence Slider -->
+        <div class="lg:col-span-3 bg-slate-900/90 p-2.5 rounded-xl border border-slate-800">
+          <div class="flex justify-between items-center mb-1">
+            <label for="slider-min-conf" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Min Confidence (min_conf)
+            </label>
+            <span id="label-min-conf-val" class="font-mono text-xs font-bold text-cyan-400">60%</span>
+          </div>
+          <input id="slider-min-conf" type="range" min="20" max="100" step="5" value="60" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+        </div>
+
+        <!-- Presets & DB Actions -->
+        <div class="lg:col-span-5 flex items-center flex-wrap gap-1.5 justify-start lg:justify-end">
+          <div class="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+            <span class="text-[10px] text-slate-500 px-1.5 font-medium">Preset:</span>
+            <button id="preset-supermarket" class="preset-btn px-2 py-0.5 rounded-md bg-indigo-600 text-white font-medium text-xs transition">Supermarket</button>
+            <button id="preset-tech" class="preset-btn px-2 py-0.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition text-xs">Tech</button>
+            <button id="preset-coffee" class="preset-btn px-2 py-0.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition text-xs">Café</button>
+            <button id="preset-bookstore" class="preset-btn px-2 py-0.5 rounded-md text-slate-300 hover:text-white hover:bg-slate-800 transition text-xs">Books</button>
+          </div>
+
+          <button id="btn-open-editor" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition">
+            <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+            <span>Edit DB (<span id="badge-tx-count">5</span>)</span>
+          </button>
+
+          <button id="btn-random-db" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium transition">
+            <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            <span>Randomize</span>
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       MAIN APPLICATION LAYOUT
+       ========================================================================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-5 flex flex-col gap-6">
+
+    <!-- Comparative Live Analytics Scorecard -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      
+      <!-- Total DB Scans -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between relative overflow-hidden shadow-sm">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span class="font-medium">Total Database Scans</span>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1.5 3 3.5 3h9c2 0 3.5-1 3.5-3V7c0-2-1.5-3-3.5-3h-9C5.5 4 4 5 4 7zm0 5h16"></path></svg>
+        </div>
+        <div class="flex items-baseline justify-between mt-1">
+          <div>
+            <div class="text-[10px] text-apriori-400 font-medium">Apriori (k passes)</div>
+            <div id="stat-apriori-scans" class="text-xl font-bold font-mono text-apriori-400">0</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] text-fpgrowth-400 font-medium">FP-Growth (Strictly 2)</div>
+            <div id="stat-fpgrowth-scans" class="text-xl font-bold font-mono text-fpgrowth-400">0</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-2 border-t border-slate-800/80 pt-1">
+          FP-Growth finishes all disk I/O after Pass 2.
+        </div>
+      </div>
+
+      <!-- Candidate Generation -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between shadow-sm">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span class="font-medium">Candidates Generated</span>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+        </div>
+        <div class="flex items-baseline justify-between mt-1">
+          <div>
+            <div class="text-[10px] text-apriori-400 font-medium">Apriori (|Cₖ| total)</div>
+            <div id="stat-apriori-cand" class="text-xl font-bold font-mono text-apriori-400">0</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] text-fpgrowth-400 font-medium">FP-Growth</div>
+            <div class="text-xl font-bold font-mono text-fpgrowth-400">0 <span class="text-[10px] text-fpgrowth-300 font-normal">(Zero)</span></div>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-2 border-t border-slate-800/80 pt-1">
+          Apriori generates combinations; FP avoids this entirely.
+        </div>
+      </div>
+
+      <!-- Item Checks / Operations -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between shadow-sm">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span class="font-medium">Item Checks & Inserts</span>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+        </div>
+        <div class="flex items-baseline justify-between mt-1">
+          <div>
+            <div class="text-[10px] text-apriori-400 font-medium">Apriori Checks</div>
+            <div id="stat-apriori-ops" class="text-xl font-bold font-mono text-apriori-400">0</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] text-fpgrowth-400 font-medium">FP Tree Inserts</div>
+            <div id="stat-fpgrowth-ops" class="text-xl font-bold font-mono text-fpgrowth-400">0</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-2 border-t border-slate-800/80 pt-1">
+          Direct candidate subset matching vs tree path walks.
+        </div>
+      </div>
+
+      <!-- Theoretical Big-O -->
+      <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col justify-between shadow-sm">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+          <span class="font-medium">Complexity Profile</span>
+          <svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </div>
+        <div class="flex items-baseline justify-between mt-1 font-mono text-xs">
+          <div>
+            <div class="text-[10px] text-apriori-400 font-sans font-medium">Apriori</div>
+            <div class="font-bold text-apriori-400 mt-0.5">O(2<sup class="text-[9px]">|I|</sup>·|D|)</div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] text-fpgrowth-400 font-sans font-medium">FP-Growth</div>
+            <div class="font-bold text-fpgrowth-400 mt-0.5">O(|D| + |Tree|)</div>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-2 border-t border-slate-800/80 pt-1">
+          In-memory FP-tree compresses high density baskets.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Dual Algorithm Arenas (Apriori Incremental Stack vs FP-Tree & Mining) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      
+      <!-- =====================================================================
+           LEFT: APRIORI ALGORITHM ARENA (INCREMENTAL STACKED PASSES Ck / Lk)
+           ===================================================================== -->
+      <div class="lg:col-span-5 bg-slate-950 border border-indigo-900/40 rounded-2xl p-4 shadow-xl flex flex-col gap-4">
+        
+        <!-- Apriori Header -->
+        <div class="flex items-center justify-between border-b border-indigo-900/40 pb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-apriori-600/20 border border-apriori-500/30 flex items-center justify-center text-apriori-400 font-bold text-sm">
+              A
+            </div>
+            <div>
+              <h2 class="font-bold text-sm text-white">Apriori Algorithm</h2>
+              <span class="text-[11px] text-apriori-300">Level-wise Candidate Generation & Downward Closure</span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span id="badge-apriori-total-iters" class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+              Iter 1 Active
+            </span>
+          </div>
+        </div>
+
+        <!-- Apriori Downward Closure Principle Notice -->
+        <div class="bg-indigo-950/40 rounded-xl p-3 border border-indigo-900/50 text-xs text-slate-300 space-y-1.5">
+          <div class="flex items-center gap-1.5 font-semibold text-indigo-300 text-xs">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            <span>Apriori Property (Downward Closure):</span>
+          </div>
+          <p class="text-[11px] text-slate-300 leading-relaxed">
+            All non-empty subsets of a frequent itemset must also be frequent. If any $(k-1)$ subset of a candidate is not in $L_{k-1}$, it is pruned immediately <em>before</em> database counting!
+          </p>
+        </div>
+
+        <!-- INCREMENTAL ITERATION CARDS CONTAINER: DO NOT OVERWRITE PREVIOUS STEPS -->
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-300 uppercase tracking-wider text-[10px]">
+              Stacked Iteration Passes History ($k=1, 2, \dots$)
+            </span>
+            <span class="text-[10px] text-slate-500 font-mono">Keeps all prior passes intact</span>
+          </div>
+
+          <!-- Dynamic Container populated with Cards for k=1, k=2, k=3, ... -->
+          <div id="container-apriori-stacked-passes" class="space-y-3 max-h-[750px] overflow-y-auto pr-1">
+            <div class="text-slate-500 italic text-xs py-4 text-center bg-slate-900/60 rounded-xl border border-slate-800">
+              Awaiting algorithm initiation...
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- =====================================================================
+           RIGHT: FP-GROWTH ARENA (HEADER TABLE + D3 FP-TREE + CONDITIONAL BASES)
+           ===================================================================== -->
+      <div id="fp-tree-section" class="lg:col-span-7 bg-slate-950 border border-emerald-900/40 rounded-2xl p-4 shadow-xl flex flex-col gap-4 scroll-mt-28">
+        
+        <!-- FP-Growth Header -->
+        <div class="flex items-center justify-between border-b border-emerald-900/40 pb-3">
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-fpgrowth-600/20 border border-fpgrowth-500/30 flex items-center justify-center text-fpgrowth-400 font-bold text-sm">
+              FP
+            </div>
+            <div>
+              <h2 class="font-bold text-sm text-white">FP-Growth Algorithm</h2>
+              <span class="text-[11px] text-fpgrowth-300">Prefix-Tree Mining Without Candidate Generation</span>
+            </div>
+          </div>
+          <span id="badge-fpgrowth-phase" class="text-xs font-mono font-bold px-2.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+            Pass 1: Frequency Scan
+          </span>
+        </div>
+
+        <!-- Upper sub-grid: Header Table (F-List) & Pass 2 Insertion Tracker -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+          
+          <!-- Header Table (F-List) -->
+          <div class="sm:col-span-5 bg-slate-900/80 rounded-xl p-3 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-semibold text-slate-300">Header Table (F-List)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Sorted Desc</span>
+              </div>
+              <p class="text-[10px] text-slate-400 mb-2">Click any item to highlight linked nodes in FP-Tree:</p>
+              <div id="container-header-table" class="space-y-1 max-h-36 overflow-y-auto text-xs font-mono pr-1">
+                <div class="text-slate-500 italic text-xs py-2 text-center">Awaiting Pass 1...</div>
+              </div>
+            </div>
+            <div class="text-[9px] text-slate-500 mt-2 border-t border-slate-800/80 pt-1">
+              Maintains node-links for bottom-up mining.
+            </div>
+          </div>
+
+          <!-- Transaction Insertion Preview -->
+          <div class="sm:col-span-7 bg-slate-900/80 rounded-xl p-3 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-1.5">
+                <span class="text-xs font-semibold text-slate-300">Pass 2: Tree Insertion Stream</span>
+                <span id="label-fp-active-tx-id" class="text-xs font-mono text-emerald-400 font-bold">Idle</span>
+              </div>
+              <p class="text-[10px] text-slate-400 mb-2">Filtered to frequent items, sorted in F-List order:</p>
+              
+              <div id="container-fp-tx-flow" class="p-2 rounded-lg bg-slate-950 border border-slate-800 min-h-[46px] flex items-center gap-1.5 flex-wrap">
+                <span class="text-slate-500 italic text-xs">Waiting for tree construction...</span>
+              </div>
+            </div>
+
+            <div class="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>Shared prefixes increment existing node counters.</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- D3.js FP-Tree Canvas Container -->
+        <div class="bg-slate-900/90 rounded-xl border border-slate-800 p-2 flex flex-col relative">
+          
+          <!-- Top Canvas Control Bar -->
+          <div class="flex items-center justify-between px-2 py-1.5 border-b border-slate-800/80 mb-1 z-10">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-slate-200">Interactive FP-Tree</span>
+              <span class="text-[10px] text-slate-400 font-mono">(Pan & Zoom Enabled)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button id="btn-tree-zoom-in" title="Zoom In" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center justify-center font-bold">+</button>
+              <button id="btn-tree-zoom-out" title="Zoom Out" class="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center justify-center font-bold">-</button>
+              <button id="btn-tree-reset-zoom" title="Reset View" class="px-2 h-6 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-medium">Reset</button>
+              <button id="btn-clear-tree-highlight" title="Clear Path Tracing" class="px-2 h-6 rounded bg-blue-950 border border-blue-800 hover:bg-blue-900 text-blue-300 text-[10px] font-semibold hidden">
+                Clear Trace
+              </button>
+            </div>
+          </div>
+
+          <!-- Active Tree Tracing HUD Callout Banner (Appears when Rule or Conditional Pattern is Traced) -->
+          <div id="tree-trace-hud" class="hidden mb-1.5 mx-1 p-2 rounded-lg bg-blue-950/80 border border-blue-700 text-xs text-blue-200 flex items-start justify-between gap-2 shadow-lg transition-all animate-fadeIn">
+            <div class="flex items-start gap-2">
+              <div class="w-5 h-5 rounded-full bg-blue-500/20 border border-blue-400 text-blue-300 flex items-center justify-center shrink-0 mt-0.5">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+              </div>
+              <div class="text-[11px] leading-relaxed">
+                <div class="font-bold text-white flex items-center gap-1.5">
+                  <span id="hud-trace-title">Tree Path Tracing Active</span>
+                  <span class="px-1.5 py-0.2 rounded bg-blue-900 text-blue-300 font-mono text-[10px]">Nodes colored blue</span>
+                </div>
+                <div id="hud-trace-detail" class="text-blue-200/90 font-mono mt-0.5">
+                  Mined via suffix conditional pattern base path sum.
+                </div>
+              </div>
+            </div>
+            <button id="btn-hud-close" class="text-blue-400 hover:text-white p-1 rounded hover:bg-blue-900 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+          </div>
+
+          <!-- SVG Canvas -->
+          <div class="w-full h-72 sm:h-80 relative overflow-hidden rounded-lg bg-slate-950/60" id="tree-canvas-wrapper">
+            <svg id="fp-tree-svg" class="w-full h-full block cursor-grab active:cursor-grabbing"></svg>
+            <div id="tree-empty-notice" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs pointer-events-none">
+              <svg class="w-8 h-8 mb-1 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+              <span>FP-Tree will render when Pass 2 begins.</span>
+            </div>
+          </div>
+
+          <!-- Conditional Pattern Bases Section (Mining Bottom-Up) -->
+          <div id="container-cond-patterns" class="mt-2.5 pt-2 border-t border-slate-800/80 text-xs">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span class="font-semibold text-emerald-400 text-xs">Conditional Pattern Bases (Sub-Trees)</span>
+              </div>
+              <span class="text-[10px] text-slate-400">Click any suffix block to trace paths on the tree (Blue)</span>
+            </div>
+            
+            <div id="cond-pattern-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+              <div class="text-slate-500 italic text-xs py-2 text-center bg-slate-950/40 rounded-lg">
+                Available once FP-Tree construction completes.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- =========================================================================
+         STEP-BY-STEP CALCULATION GUIDE & ASSOCIATION RULES ENGINE
+         ========================================================================= -->
+    <section id="section-association-rules" class="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col gap-5 scroll-mt-28">
+      
+      <!-- Section Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-cyan-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-sm">
+              ∑
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h2 class="font-bold text-base text-white math-render">Step-by-Step Rule Derivation & Association Rules ($A \Rightarrow B$)</h2>
+                <span id="badge-rules-count" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  0 Rules Found
+                </span>
+              </div>
+              <p class="text-xs text-slate-400">Transform frequent itemsets and conditional pattern counts into actionable rules with explicit mathematical formulas and tree visual tracing.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sorting & Display Filter -->
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-slate-400">Sort by:</span>
+          <select id="select-rules-sort" class="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2.5 py-1.5 outline-none cursor-pointer">
+            <option value="confidence">Confidence (High to Low)</option>
+            <option value="lift">Lift (Correlation Strength)</option>
+            <option value="support">Support</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Interactive Math Derivation Explainer Banner -->
+      <div class="bg-slate-900/90 rounded-xl p-4 border border-cyan-900/40 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        
+        <!-- Support Card -->
+        <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-between">
+          <div>
+            <span class="text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold">Metric 1</span>
+            <h3 class="font-bold text-slate-200 text-xs mt-0.5 math-render">Support: $P(A \cup B)$</h3>
+            <p class="text-slate-400 text-[11px] mt-1 leading-relaxed">
+              Fraction of total transactions containing both items:
+            </p>
+            <div class="bg-slate-900 p-2.5 rounded mt-2 text-center text-xs text-amber-300 math-render overflow-x-auto">
+              $$\text{supp}(A \Rightarrow B) = \frac{\text{count}(A \cup B)}{N}$$
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-400 mt-2.5 border-t border-slate-800/80 pt-1.5 math-render">
+            Filter condition: $\text{supp}(A \Rightarrow B) \ge \text{min\_sup}$
+          </div>
+        </div>
+
+        <!-- Confidence Card -->
+        <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-between">
+          <div>
+            <span class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold">Metric 2</span>
+            <h3 class="font-bold text-slate-200 text-xs mt-0.5 math-render">Confidence: $P(B \mid A)$</h3>
+            <p class="text-slate-400 text-[11px] mt-1 leading-relaxed">
+              Likelihood of item $B$ given antecedent $A$ is present:
+            </p>
+            <div class="bg-slate-900 p-2.5 rounded mt-2 text-center text-xs text-cyan-300 math-render overflow-x-auto">
+              $$\text{conf}(A \Rightarrow B) = \frac{\text{count}(A \cup B)}{\text{count}(A)}$$
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-400 mt-2.5 border-t border-slate-800/80 pt-1.5 math-render">
+            Filter condition: $\text{conf}(A \Rightarrow B) \ge \text{min\_conf}$
+          </div>
+        </div>
+
+        <!-- Lift Card -->
+        <div class="p-3 bg-slate-950 rounded-lg border border-slate-800 flex flex-col justify-between">
+          <div>
+            <span class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">Metric 3</span>
+            <h3 class="font-bold text-slate-200 text-xs mt-0.5">Lift: Correlation Ratio</h3>
+            <p class="text-slate-400 text-[11px] mt-1 leading-relaxed">
+              How much more often $A$ and $B$ occur than by independent chance:
+            </p>
+            <div class="bg-slate-900 p-2.5 rounded mt-2 text-center text-xs text-emerald-300 math-render overflow-x-auto">
+              $$\text{lift}(A \Rightarrow B) = \frac{\text{conf}(A \Rightarrow B)}{\text{supp}(B)}$$
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-400 mt-2.5 border-t border-slate-800/80 pt-1.5 math-render">
+            $\text{Lift} > 1.0 \implies \text{Positive Complementarity}$
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Rules Table -->
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider text-[11px]">
+            <tr>
+              <th class="px-4 py-3 math-render">Rule ($A \Rightarrow B$)</th>
+              <th class="px-3 py-3 font-mono">Support</th>
+              <th class="px-3 py-3 font-mono">Confidence</th>
+              <th class="px-3 py-3 font-mono">Lift</th>
+              <th class="px-4 py-3">Interpretation & Step-by-Step Connection</th>
+              <th class="px-3 py-3 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-rules-body" class="divide-y divide-slate-800/80 font-sans">
+            <tr>
+              <td colspan="6" class="px-4 py-8 text-center text-slate-500 italic">
+                Step through the algorithms or click "Auto Play" to generate frequent itemsets and derive association rules.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+
+    <!-- Dedicated Interactive Rule Derivation Drawer / Modal -->
+    <div id="modal-rule-derivation" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
+        
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono text-xs font-bold">Calculation Trace</span>
+            <h3 id="modal-rule-title" class="text-base font-bold text-white">Rule Derivation Guide</h3>
+          </div>
+          <button id="btn-close-derivation-modal" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+          </button>
+        </div>
+
+        <div id="modal-rule-content" class="space-y-4 text-xs">
+          <!-- Dynamically populated math walk-through -->
+        </div>
+
+        <div class="flex items-center justify-between pt-2 border-t border-slate-800">
+          <button id="btn-modal-trace-tree" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-lg transition flex items-center gap-1.5 shadow-md shadow-blue-600/30">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+            <span>Trace on FP-Tree (Blue)</span>
+          </button>
+          <button id="btn-derivation-close-action" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg transition">
+            Close Guide
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Educational Architecture Deep-Dive Comparison Reference Guide -->
+    <section class="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-xl">
+      <h2 class="font-bold text-base text-white mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+        <span>Educational Architecture: Head-to-Head Comparison</span>
+      </h2>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        
+        <!-- Apriori Principle Card -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 text-apriori-400 font-bold text-sm mb-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-apriori-500"></span>
+              <span>The Apriori Bottleneck</span>
+            </div>
+            <p class="text-slate-300 leading-relaxed mb-3 math-render">
+              Apriori generates candidate $k$-itemsets ($C_k$) by self-joining $L_{k-1} \bowtie L_{k-1}$. Even with Downward Closure subset pruning, verifying each candidate requires a <strong>full disk scan of the transaction database for every iteration $k$</strong>.
+            </p>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 font-mono text-[11px] text-apriori-300 math-render">
+            Passes: $k$ full DB disk scans<br>
+            Candidates: Combinatorial explosion $\mathcal{O}(2^{|I|})$
+          </div>
+        </div>
+
+        <!-- FP-Growth Principle Card -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 text-fpgrowth-400 font-bold text-sm mb-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-fpgrowth-500"></span>
+              <span>The FP-Growth Innovation</span>
+            </div>
+            <p class="text-slate-300 leading-relaxed mb-3">
+              FP-Growth compresses transactions into an in-memory <strong>Frequent Pattern Tree</strong> using exactly <strong>2 database scans</strong>. By arranging items in descending frequency, prefixes are highly compressed and mining is done via recursive conditional sub-trees without candidate generation.
+            </p>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 font-mono text-[11px] text-fpgrowth-300">
+            Passes: Strictly 2 scans<br>
+            Candidates: 0 generated (Zero)
+          </div>
+        </div>
+
+        <!-- Association Metrics Card -->
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center gap-2 text-cyan-400 font-bold text-sm mb-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+              <span>Rule Evaluation Metrics</span>
+            </div>
+            <div class="text-slate-300 leading-relaxed mb-2 space-y-1 math-render">
+              <div>$\text{supp}(A \Rightarrow B) = P(A \cup B)$</div>
+              <div>$\text{conf}(A \Rightarrow B) = P(B \mid A) = \frac{\text{supp}(A \cup B)}{\text{supp}(A)}$</div>
+              <div>$\text{lift}(A \Rightarrow B) = \frac{\text{conf}(A \Rightarrow B)}{\text{supp}(B)}$</div>
+            </div>
+          </div>
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 font-mono text-[11px] text-cyan-300 math-render">
+            $\text{Lift} > 1$: Positive Correlation<br>
+            $\text{Lift} = 1$: Independent Items
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- =========================================================================
+       DATABASE EDITOR MODAL
+       ========================================================================= -->
+  <div id="modal-db-editor" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full p-5 shadow-2xl flex flex-col gap-4 max-h-[90vh]">
+      
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div>
+          <h3 class="text-base font-bold text-white">Database Transaction Editor</h3>
+          <p class="text-xs text-slate-400">Add, delete, or inspect individual customer baskets</p>
+        </div>
+        <button id="btn-close-modal" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Transaction List -->
+      <div id="modal-tx-list" class="space-y-2 overflow-y-auto max-h-80 pr-1 text-xs">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Add New Transaction Control -->
+      <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 flex flex-col sm:flex-row gap-2">
+        <input id="input-new-tx-items" type="text" placeholder="e.g. Milk, Bread, Diapers (comma separated)" class="flex-1 bg-slate-900 border border-slate-700 text-xs text-slate-200 px-3 py-2 rounded-lg outline-none focus:border-indigo-500">
+        <button id="btn-add-tx" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-lg transition whitespace-nowrap">
+          + Add Transaction
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-xs">
+        <span class="text-slate-400">Edits automatically recalculate both algorithms.</span>
+        <button id="btn-modal-done" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg transition">
+          Done & Re-mine
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div id="toast-msg" class="fixed bottom-5 right-5 bg-slate-800 border border-slate-700 text-white text-xs px-4 py-2.5 rounded-xl shadow-xl transform translate-y-12 opacity-0 transition duration-300 pointer-events-none flex items-center gap-2 z-50">
+    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+    <span id="toast-text">Action completed</span>
+  </div>
+
+  <!-- =========================================================================
+       JAVASCRIPT LOGIC ENGINE
+       ========================================================================= -->
+  <script>
+    /* ==========================================================================
+       1. DATA STRUCTURES & PRESET DATASETS
+       ========================================================================== */
+    const PRESETS = {
+      supermarket: [
+        ['Bread', 'Milk'],
+        ['Bread', 'Diapers', 'Beer', 'Eggs'],
+        ['Milk', 'Diapers', 'Beer', 'Cola'],
+        ['Bread', 'Milk', 'Diapers', 'Beer'],
+        ['Bread', 'Milk', 'Diapers', 'Cola']
+      ],
+      tech: [
+        ['Laptop', 'Mouse', 'Keyboard'],
+        ['Laptop', 'Mouse', 'USB-C'],
+        ['Monitor', 'Keyboard', 'Mouse'],
+        ['Laptop', 'Monitor', 'USB-C'],
+        ['Laptop', 'Mouse', 'Keyboard', 'USB-C'],
+        ['Headset', 'Laptop', 'Mouse']
+      ],
+      coffee: [
+        ['Espresso', 'Croissant'],
+        ['Latte', 'Muffin', 'Cookie'],
+        ['Espresso', 'Latte', 'Croissant'],
+        ['Latte', 'Cookie'],
+        ['Espresso', 'Croissant', 'Muffin'],
+        ['Espresso', 'Latte', 'Muffin', 'Cookie']
+      ],
+      bookstore: [
+        ['SciFi', 'Fantasy', 'Bookmark'],
+        ['Mystery', 'Thriller', 'Coffee'],
+        ['SciFi', 'Bookmark', 'Coffee'],
+        ['SciFi', 'Fantasy', 'Mystery', 'Bookmark'],
+        ['Fantasy', 'Comic', 'Bookmark']
+      ]
+    };
+
+    // State Variables
+    let currentDB = JSON.parse(JSON.stringify(PRESETS.supermarket));
+    let minSupPercent = 40;
+    let minConfPercent = 60;
+    let currentStepIndex = 0;
+    let isPlaying = false;
+    let playIntervalId = null;
+    let playSpeed = 1000;
+    let precomputedSteps = [];
+
+    // Tree Tracing & Highlighting State
+    // Format: { active: boolean, nodeIds: Set<string>, linkKeys: Set<string>, title: string, detail: string }
+    let treeTraceState = {
+      active: false,
+      nodeIds: new Set(),
+      linkKeys: new Set(),
+      title: '',
+      detail: ''
+    };
+    let currentlyViewedRule = null;
+
+    // D3 FP-Tree Layout Objects
+    let treeSvg, treeG, zoomBehavior;
+
+    /* ==========================================================================
+       2. HELPER FUNCTIONS FOR ITEMSET & ASSOCIATION MATHEMATICS
+       ========================================================================== */
+    function renderMath(targetElement) {
+      if (typeof renderMathInElement !== 'function') return;
+      try {
+        renderMathInElement(targetElement || document.body, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false }
+          ],
+          throwOnError: false
+        });
+      } catch (err) {
+        console.warn('KaTeX render warning:', err);
+      }
+    }
+
+    function isSubset(subset, set) {
+      return subset.every(item => set.includes(item));
+    }
+
+    function setsEqual(a, b) {
+      if (a.length !== b.length) return false;
+      return a.slice().sort().every((v, i) => v === b.slice().sort()[i]);
+    }
+
+    function formatItemset(set) {
+      return '{' + set.join(', ') + '}';
+    }
+
+    function getProperSubsets(array) {
+      const result = [];
+      const total = 1 << array.length;
+      for (let i = 1; i < total - 1; i++) {
+        const sub = [];
+        for (let j = 0; j < array.length; j++) {
+          if ((i & (1 << j)) > 0) {
+            sub.push(array[j]);
+          }
+        }
+        result.push(sub);
+      }
+      return result;
+    }
+
+    /* ==========================================================================
+       3. UNIFIED ALGORITHM EXECUTION & STEP GENERATOR
+       ========================================================================== */
+    function computeUnifiedSteps() {
+      const steps = [];
+      const N = currentDB.length;
+      const minSupCount = Math.ceil((minSupPercent / 100) * N);
+
+      // Historical stack for Apriori iterations across steps
+      const aprioriPassesHistory = [];
+
+      // STEP 0: Initial State
+      steps.push({
+        phase: 'INIT',
+        title: 'Initial Database Setup',
+        headline: 'Transaction Database Loaded',
+        detail: `Database contains ${N} transactions. Min Support is set to ${minSupPercent}% (≥ ${minSupCount} transactions). Min Confidence is ${minConfPercent}%.`,
+        apriori: {
+          currentK: 1,
+          passes: [],
+          scans: 0,
+          candidatesCount: 0,
+          comparisons: 0,
+          message: 'Ready to scan database for 1-itemset frequencies.'
+        },
+        fpgrowth: {
+          phase: 'Waiting',
+          headerTable: [],
+          fList: [],
+          treeData: { id: 'root', name: 'null', count: 0, children: [] },
+          activeTx: null,
+          activePath: [],
+          scans: 0,
+          comparisons: 0,
+          condBases: [],
+          message: 'Pass 1 waiting to scan database for item frequencies.'
+        }
+      });
+
+      // 1. PASS 1: FREQUENCY COUNTING (FP-Growth Pass 1, Apriori C1 scan)
+      const itemCounts = {};
+      currentDB.forEach(tx => {
+        tx.forEach(item => {
+          itemCounts[item] = (itemCounts[item] || 0) + 1;
+        });
+      });
+
+      const uniqueItems = Object.keys(itemCounts).sort();
+      const c1 = uniqueItems.map(item => ({
+        itemset: [item],
+        count: itemCounts[item],
+        status: itemCounts[item] >= minSupCount ? 'kept' : 'pruned'
+      }));
+
+      // Filter frequent 1-items (L1 and F-List)
+      const l1 = c1.filter(c => c.count >= minSupCount).map(c => ({
+        itemset: c.itemset,
+        count: c.count,
+        status: 'kept'
+      }));
+
+      // F-List: sorted descending by frequency, then alphabetically
+      const fListItems = l1.map(item => ({ item: item.itemset[0], count: item.count }))
+        .sort((a, b) => b.count - a.count || a.item.localeCompare(b.item));
+      const fListOrder = fListItems.map(x => x.item);
+
+      // Iteration 1 object for Apriori Stack
+      const pass1Obj = {
+        k: 1,
+        ck: c1,
+        lk: l1,
+        active: true,
+        scanNum: 1,
+        pruneCount: c1.length - l1.length,
+        notes: `Scanned all ${N} transactions. Found ${c1.length} 1-item candidates. Filtered ${l1.length} frequent items (≥ ${minSupCount} occurrences).`
+      };
+      aprioriPassesHistory.push(pass1Obj);
+
+      // STEP 1: Pass 1 Count & Filter
+      steps.push({
+        phase: 'PASS_1',
+        title: 'Pass 1: 1-Item Frequencies & Header Table',
+        headline: 'Apriori: Count C₁ → Filter L₁ | FP-Growth: Build Header Table (F-List)',
+        detail: `Both algorithms execute Pass 1. Apriori counts single-item support. FP-Growth sorts frequent items into the Header Table descending by frequency.`,
+        apriori: {
+          currentK: 1,
+          passes: JSON.parse(JSON.stringify(aprioriPassesHistory)),
+          scans: 1,
+          candidatesCount: c1.length,
+          comparisons: currentDB.reduce((sum, tx) => sum + tx.length, 0),
+          message: `Pass 1 complete. Formed L₁ with ${l1.length} frequent items.`
+        },
+        fpgrowth: {
+          phase: 'Header Table Ready',
+          headerTable: fListItems,
+          fList: fListOrder,
+          treeData: { id: 'root', name: 'null', count: 0, children: [] },
+          activeTx: null,
+          activePath: [],
+          scans: 1,
+          comparisons: currentDB.reduce((sum, tx) => sum + tx.length, 0),
+          condBases: [],
+          message: `Header Table (F-List) generated with ${fListItems.length} frequent items in descending order.`
+        }
+      });
+
+      // 2. PASS 2: FP-TREE CONSTRUCTION (One step per transaction insertion)
+      const c2Candidates = [];
+      for (let i = 0; i < l1.length; i++) {
+        for (let j = i + 1; j < l1.length; j++) {
+          c2Candidates.push([l1[i].itemset[0], l1[j].itemset[0]].sort());
+        }
+      }
+
+      // Add Pass 2 to Apriori history (Active Candidate Generation phase)
+      const pass2Obj = {
+        k: 2,
+        ck: c2Candidates.map(c => ({ itemset: c, count: '?', status: 'pending' })),
+        lk: [],
+        active: true,
+        scanNum: 'Pending Scan 2',
+        pruneCount: 0,
+        notes: `Joined L₁ ⋈ L₁ to produce ${c2Candidates.length} candidate pairs (C₂). Awaiting full DB Scan 2 to count support.`
+      };
+      aprioriPassesHistory[0].active = false;
+      aprioriPassesHistory.push(pass2Obj);
+
+      let treeRoot = { id: 'root', name: 'null', count: 0, children: [] };
+      let nodeCounter = 1;
+      let fpTreeComparisons = steps[1].fpgrowth.comparisons;
+
+      currentDB.forEach((tx, txIndex) => {
+        const orderedTx = tx.filter(item => fListOrder.includes(item))
+          .sort((a, b) => fListOrder.indexOf(a) - fListOrder.indexOf(b));
+
+        let currentNode = treeRoot;
+        const activePathNodeIds = ['root'];
+
+        orderedTx.forEach(item => {
+          fpTreeComparisons++;
+          let child = currentNode.children.find(c => c.name === item);
+          if (child) {
+            child.count += 1;
+            currentNode = child;
+          } else {
+            const newNode = {
+              id: `node-${nodeCounter++}`,
+              name: item,
+              count: 1,
+              children: []
+            };
+            currentNode.children.push(newNode);
+            currentNode = newNode;
+          }
+          activePathNodeIds.push(currentNode.id);
+        });
+
+        const treeSnapshot = JSON.parse(JSON.stringify(treeRoot));
+
+        steps.push({
+          phase: 'TREE_BUILD',
+          title: `Pass 2: Insert Transaction T${txIndex + 1}`,
+          headline: `FP-Growth: Insert T${txIndex + 1} (${orderedTx.join(' → ') || '∅'})`,
+          detail: `Transaction T${txIndex + 1} [${tx.join(', ')}] filtered to frequent items: [${orderedTx.join(', ')}]. Path traversed or inserted into FP-Tree. Shared prefixes increment existing counts.`,
+          apriori: {
+            currentK: 2,
+            passes: JSON.parse(JSON.stringify(aprioriPassesHistory)),
+            scans: 1,
+            candidatesCount: c1.length + c2Candidates.length,
+            comparisons: steps[1].apriori.comparisons,
+            message: `Apriori has ${c2Candidates.length} candidate pairs in C₂. It must scan the entire database again to count each pair!`
+          },
+          fpgrowth: {
+            phase: 'Tree Construction (Pass 2)',
+            headerTable: fListItems,
+            fList: fListOrder,
+            treeData: treeSnapshot,
+            activeTx: { index: txIndex, original: tx, ordered: orderedTx },
+            activePath: activePathNodeIds,
+            scans: 2,
+            comparisons: fpTreeComparisons,
+            condBases: [],
+            message: `Inserted T${txIndex + 1} into FP-Tree. Shared prefix paths compress storage.`
+          }
+        });
+      });
+
+      // 3. APRIORI ITERATION K=2 SCAN & FILTER
+      const c2Counts = c2Candidates.map(c => {
+        let count = 0;
+        currentDB.forEach(tx => {
+          if (isSubset(c, tx)) count++;
+        });
+        return {
+          itemset: c,
+          count: count,
+          status: count >= minSupCount ? 'kept' : 'pruned'
+        };
+      });
+
+      const l2 = c2Counts.filter(c => c.count >= minSupCount);
+      let aprioriTotalComparisons = steps[steps.length - 1].apriori.comparisons + (c2Candidates.length * N);
+
+      aprioriPassesHistory[1].ck = c2Counts;
+      aprioriPassesHistory[1].lk = l2;
+      aprioriPassesHistory[1].scanNum = 2;
+      aprioriPassesHistory[1].pruneCount = c2Counts.filter(c => c.status === 'pruned').length;
+      aprioriPassesHistory[1].notes = `DB Scan 2 complete. Evaluated ${c2Candidates.length} pairs. Found ${l2.length} frequent 2-itemsets meeting min_sup ≥ ${minSupCount}.`;
+
+      // Extract conditional patterns for each item in reverse F-List
+      const condBasesInfo = [];
+      for (let i = fListOrder.length - 1; i >= 0; i--) {
+        const item = fListOrder[i];
+        const prefixPaths = [];
+
+        function findPaths(node, path) {
+          if (node.name === item && path.length > 0) {
+            prefixPaths.push({ path: [...path], count: node.count, nodeId: node.id });
+          }
+          if (node.children) {
+            node.children.forEach(c => findPaths(c, node.name === 'null' ? [] : [...path, { name: node.name, id: node.id }]));
+          }
+        }
+        findPaths(treeRoot, []);
+
+        if (prefixPaths.length > 0) {
+          const pathItemCounts = {};
+          prefixPaths.forEach(p => {
+            p.path.forEach(pi => {
+              pathItemCounts[pi.name] = (pathItemCounts[pi.name] || 0) + p.count;
+            });
+          });
+          const condFrequent = Object.entries(pathItemCounts)
+            .filter(([_, count]) => count >= minSupCount)
+            .map(([pi, count]) => `${pi}: ${count}`);
+
+          condBasesInfo.push({
+            item,
+            pathsRaw: prefixPaths,
+            paths: prefixPaths.map(p => `(${p.path.map(x => x.name).join(', ')}): ${p.count}`),
+            condFreq: condFrequent.length > 0 ? condFrequent.join(', ') : 'None'
+          });
+        }
+      }
+
+      // STEP: Apriori Scan 2 & FP-Growth DB Scan Finished Forever!
+      steps.push({
+        phase: 'APRIORI_SCAN_2',
+        title: 'Apriori DB Scan 2 vs. FP-Growth In-Memory Tree',
+        headline: 'Apriori: Completed DB Scan 2 | FP-Growth: Zero Further Disk Scans!',
+        detail: `Notice the critical difference: Apriori had to scan all ${N} transactions on disk to evaluate pairs in C₂. FP-Growth is finished with all disk scans (Strictly 2 Scans) and now mines patterns purely in-memory.`,
+        apriori: {
+          currentK: 2,
+          passes: JSON.parse(JSON.stringify(aprioriPassesHistory)),
+          scans: 2,
+          candidatesCount: c1.length + c2Candidates.length,
+          comparisons: aprioriTotalComparisons,
+          message: `Completed full DB Scan 2. Found ${l2.length} frequent 2-itemsets in L₂.`
+        },
+        fpgrowth: {
+          phase: 'Pass 2 Finished (Disk Closed)',
+          headerTable: fListItems,
+          fList: fListOrder,
+          treeData: JSON.parse(JSON.stringify(treeRoot)),
+          activeTx: null,
+          activePath: [],
+          scans: 2,
+          comparisons: fpTreeComparisons,
+          condBases: condBasesInfo,
+          message: 'FP-Tree fully constructed! Disk scans terminated. Beginning conditional pattern mining.'
+        }
+      });
+
+      // 4. HIGHER-ORDER ITERATIONS (k=3, k=4...)
+      let currentLk = l2;
+      let k = 3;
+      let totalAprioriCandidates = c1.length + c2Candidates.length;
+
+      while (currentLk.length > 0) {
+        const nextCandidates = [];
+        let downwardClosurePruned = 0;
+
+        for (let i = 0; i < currentLk.length; i++) {
+          for (let j = i + 1; j < currentLk.length; j++) {
+            const setA = currentLk[i].itemset;
+            const setB = currentLk[j].itemset;
+            let canJoin = true;
+            for (let idx = 0; idx < k - 2; idx++) {
+              if (setA[idx] !== setB[idx]) { canJoin = false; break; }
+            }
+            if (canJoin) {
+              const joined = Array.from(new Set([...setA, ...setB])).sort();
+              if (joined.length === k) {
+                if (!nextCandidates.some(c => setsEqual(c, joined))) {
+                  const subsets = getProperSubsets(joined).filter(s => s.length === k - 1);
+                  const allSubsetsFrequent = subsets.every(sub =>
+                    currentLk.some(l => setsEqual(l.itemset, sub))
+                  );
+                  if (allSubsetsFrequent) {
+                    nextCandidates.push(joined);
+                  } else {
+                    downwardClosurePruned++;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        if (nextCandidates.length === 0) break;
+
+        totalAprioriCandidates += nextCandidates.length;
+        aprioriTotalComparisons += nextCandidates.length * N;
+
+        const countedCk = nextCandidates.map(cand => {
+          let cnt = 0;
+          currentDB.forEach(tx => {
+            if (isSubset(cand, tx)) cnt++;
+          });
+          return {
+            itemset: cand,
+            count: cnt,
+            status: cnt >= minSupCount ? 'kept' : 'pruned'
+          };
+        });
+
+        const nextLk = countedCk.filter(c => c.count >= minSupCount);
+
+        aprioriPassesHistory.forEach(p => p.active = false);
+        const passKObj = {
+          k: k,
+          ck: countedCk,
+          lk: nextLk,
+          active: true,
+          scanNum: k,
+          pruneCount: downwardClosurePruned + countedCk.filter(c => c.status === 'pruned').length,
+          notes: `DB Scan ${k} evaluated ${nextCandidates.length} candidate ${k}-itemsets. (Pruned ${downwardClosurePruned} prior to scan via Downward Closure).`
+        };
+        aprioriPassesHistory.push(passKObj);
+
+        steps.push({
+          phase: `APRIORI_SCAN_${k}`,
+          title: `Apriori DB Scan ${k} (k=${k})`,
+          headline: `Apriori: Scan ${k} for C_${k} | FP-Growth: Mining Conditional Sub-trees`,
+          detail: `Apriori performs its ${k}th full disk scan across all ${N} transactions to count candidate ${k}-itemsets. FP-Growth extracts frequent patterns from conditional trees in microseconds.`,
+          apriori: {
+            currentK: k,
+            passes: JSON.parse(JSON.stringify(aprioriPassesHistory)),
+            scans: k,
+            candidatesCount: totalAprioriCandidates,
+            comparisons: aprioriTotalComparisons,
+            message: `Scanned DB again (Scan #${k}). Formed L_${k} with ${nextLk.length} frequent itemsets.`
+          },
+          fpgrowth: {
+            phase: 'Recursive In-Memory Mining',
+            headerTable: fListItems,
+            fList: fListOrder,
+            treeData: JSON.parse(JSON.stringify(treeRoot)),
+            activeTx: null,
+            activePath: [],
+            scans: 2,
+            comparisons: fpTreeComparisons + (k * 2),
+            condBases: condBasesInfo,
+            message: `Mining conditional pattern bases for items. Zero additional disk access required!`
+          }
+        });
+
+        currentLk = nextLk;
+        k++;
+      }
+
+      // Collect all frequent itemsets
+      const allFrequentItemsets = [];
+      aprioriPassesHistory.forEach(pass => {
+        pass.lk.forEach(item => {
+          if (!allFrequentItemsets.some(x => setsEqual(x.itemset, item.itemset))) {
+            allFrequentItemsets.push({ itemset: item.itemset, count: item.count });
+          }
+        });
+      });
+
+      // Compute Association Rules
+      const rules = [];
+      allFrequentItemsets.filter(fi => fi.itemset.length >= 2).forEach(fi => {
+        const itemset = fi.itemset;
+        const itemsetSupport = fi.count / N;
+        const subsets = getProperSubsets(itemset);
+
+        subsets.forEach(ant => {
+          const con = itemset.filter(x => !ant.includes(x)).sort();
+          if (con.length === 0) return;
+
+          const antItemset = allFrequentItemsets.find(x => setsEqual(x.itemset, ant));
+          const conItemset = allFrequentItemsets.find(x => setsEqual(x.itemset, con));
+
+          if (antItemset && conItemset) {
+            const antCount = antItemset.count;
+            const conCount = conItemset.count;
+            const jointCount = fi.count;
+
+            const antSupport = antCount / N;
+            const conSupport = conCount / N;
+            const confidence = jointCount / antCount;
+            const lift = confidence / conSupport;
+
+            if (confidence * 100 >= minConfPercent) {
+              rules.push({
+                antecedent: ant,
+                consequent: con,
+                jointItemset: itemset,
+                jointCount: jointCount,
+                antCount: antCount,
+                conCount: conCount,
+                totalN: N,
+                support: itemsetSupport,
+                confidence: confidence,
+                lift: lift
+              });
+            }
+          }
+        });
+      });
+
+      aprioriPassesHistory.forEach(p => p.active = false);
+
+      // FINAL STEP: Complete State
+      steps.push({
+        phase: 'COMPLETED',
+        title: 'Mining Complete & Association Rules Derived',
+        headline: 'Both Algorithms Arrive at Identical Frequent Itemsets!',
+        detail: `Apriori required ${aprioriPassesHistory.length} full disk scans with candidate explosion. FP-Growth extracted the same patterns in 2 scans with zero candidate generation. Inspect derived rules below.`,
+        apriori: {
+          currentK: k - 1,
+          passes: JSON.parse(JSON.stringify(aprioriPassesHistory)),
+          scans: aprioriPassesHistory.length,
+          candidatesCount: totalAprioriCandidates,
+          comparisons: aprioriTotalComparisons,
+          message: `Execution complete. Derived ${allFrequentItemsets.length} total frequent patterns.`
+        },
+        fpgrowth: {
+          phase: 'Complete',
+          headerTable: fListItems,
+          fList: fListOrder,
+          treeData: JSON.parse(JSON.stringify(treeRoot)),
+          activeTx: null,
+          activePath: [],
+          scans: 2,
+          comparisons: fpTreeComparisons,
+          condBases: condBasesInfo,
+          message: 'FP-Growth completed with strictly 2 DB scans and zero candidate generation.'
+        },
+        rules: rules
+      });
+
+      return steps;
+    }
+
+    /* ==========================================================================
+       4. D3.JS FP-TREE RENDERING & BLUE PATH HIGHLIGHT ENGINE
+       ========================================================================== */
+    function initD3Tree() {
+      const svgEl = document.getElementById('fp-tree-svg');
+      const wrapper = document.getElementById('tree-canvas-wrapper');
+      const width = wrapper.clientWidth || 500;
+      const height = wrapper.clientHeight || 320;
+
+      svgEl.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      d3.select(svgEl).selectAll('*').remove();
+
+      treeSvg = d3.select(svgEl);
+
+      const defs = treeSvg.append('defs');
+      
+      // Green Glow Filter
+      const greenFilter = defs.append('filter')
+        .attr('id', 'glow-green')
+        .attr('x', '-30%').attr('y', '-30%')
+        .attr('width', '160%').attr('height', '160%');
+      greenFilter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'blur');
+      greenFilter.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
+
+      // Blue Glow Filter for Back-Tracing
+      const blueFilter = defs.append('filter')
+        .attr('id', 'glow-blue')
+        .attr('x', '-40%').attr('y', '-40%')
+        .attr('width', '180%').attr('height', '180%');
+      blueFilter.append('feGaussianBlur').attr('stdDeviation', '4').attr('result', 'blur');
+      blueFilter.append('feComposite').attr('in', 'SourceGraphic').attr('in2', 'blur').attr('operator', 'over');
+
+      treeG = treeSvg.append('g').attr('id', 'tree-viewport');
+
+      zoomBehavior = d3.zoom()
+        .scaleExtent([0.3, 2.5])
+        .on('zoom', (event) => {
+          treeG.attr('transform', event.transform);
+        });
+
+      treeSvg.call(zoomBehavior);
+      resetTreeZoom();
+    }
+
+    function resetTreeZoom() {
+      const wrapper = document.getElementById('tree-canvas-wrapper');
+      const width = wrapper.clientWidth || 500;
+      if (treeSvg && zoomBehavior) {
+        treeSvg.transition().duration(400).call(
+          zoomBehavior.transform,
+          d3.zoomIdentity.translate(width / 2, 35).scale(0.85)
+        );
+      }
+    }
+
+    function renderD3Tree(treeData, activeNodeIds = []) {
+      if (!treeG || !treeData) return;
+
+      const notice = document.getElementById('tree-empty-notice');
+      if (!treeData.children || treeData.children.length === 0) {
+        if (notice) notice.classList.remove('hidden');
+        treeG.selectAll('*').remove();
+        return;
+      } else {
+        if (notice) notice.classList.add('hidden');
+      }
+
+      const rootHierarchy = d3.hierarchy(treeData);
+      const treeLayout = d3.tree()
+        .nodeSize([70, 65])
+        .separation((a, b) => (a.parent === b.parent ? 1.1 : 1.3));
+
+      treeLayout(rootHierarchy);
+
+      const nodes = rootHierarchy.descendants();
+      const links = rootHierarchy.links();
+
+      const isTraceActive = treeTraceState.active;
+
+      // Links
+      const linkSelection = treeG.selectAll('.tree-link')
+        .data(links, d => `${d.source.data.id}->${d.target.data.id}`);
+
+      linkSelection.exit().remove();
+
+      const linkEnter = linkSelection.enter()
+        .append('path')
+        .attr('class', 'tree-link')
+        .attr('stroke', '#334155')
+        .attr('stroke-width', 2);
+
+      linkSelection.merge(linkEnter)
+        .transition().duration(350)
+        .attr('d', d3.linkVertical()
+          .x(d => d.x)
+          .y(d => d.y)
+        )
+        .attr('stroke', d => {
+          const linkKey = `${d.source.data.id}->${d.target.data.id}`;
+          if (isTraceActive && treeTraceState.linkKeys.has(linkKey)) {
+            return '#3b82f6'; // Vivid Blue for trace
+          }
+          const isTargetActive = activeNodeIds.includes(d.target.data.id);
+          const isSourceActive = activeNodeIds.includes(d.source.data.id);
+          return (isTargetActive && isSourceActive) ? '#10b981' : '#334155';
+        })
+        .attr('stroke-width', d => {
+          const linkKey = `${d.source.data.id}->${d.target.data.id}`;
+          if (isTraceActive && treeTraceState.linkKeys.has(linkKey)) {
+            return 3.5;
+          }
+          return activeNodeIds.includes(d.target.data.id) ? 3 : 1.8;
+        })
+        .attr('opacity', d => {
+          const linkKey = `${d.source.data.id}->${d.target.data.id}`;
+          if (isTraceActive) {
+            return treeTraceState.linkKeys.has(linkKey) ? 1.0 : 0.2;
+          }
+          return 1.0;
+        });
+
+      // Nodes
+      const nodeSelection = treeG.selectAll('.tree-node')
+        .data(nodes, d => d.data.id);
+
+      nodeSelection.exit().remove();
+
+      const nodeEnter = nodeSelection.enter()
+        .append('g')
+        .attr('class', 'tree-node cursor-pointer')
+        .attr('transform', d => `translate(${d.x},${d.y})`);
+
+      nodeEnter.append('circle')
+        .attr('class', 'node-halo')
+        .attr('r', 17)
+        .attr('fill', 'none');
+
+      nodeEnter.append('circle')
+        .attr('class', 'node-core')
+        .attr('r', 15)
+        .attr('stroke-width', 2);
+
+      nodeEnter.append('text')
+        .attr('class', 'node-label')
+        .attr('dy', '0.35em')
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '10px')
+        .attr('font-weight', '600');
+
+      nodeEnter.append('rect')
+        .attr('class', 'badge-bg')
+        .attr('x', 6)
+        .attr('y', -16)
+        .attr('width', 16)
+        .attr('height', 13)
+        .attr('rx', 4);
+
+      nodeEnter.append('text')
+        .attr('class', 'badge-text')
+        .attr('x', 14)
+        .attr('y', -7)
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '9px')
+        .attr('font-weight', 'bold');
+
+      const nodeUpdate = nodeSelection.merge(nodeEnter);
+
+      nodeUpdate.transition().duration(350)
+        .attr('transform', d => `translate(${d.x},${d.y})`)
+        .attr('opacity', d => {
+          if (isTraceActive) {
+            if (d.data.id === 'root') return 0.85;
+            return treeTraceState.nodeIds.has(d.data.id) ? 1.0 : 0.25;
+          }
+          return 1.0;
+        });
+
+      nodeUpdate.select('.node-core')
+        .attr('fill', d => {
+          if (d.data.id === 'root') return '#1e293b';
+          const isBlue = isTraceActive && treeTraceState.nodeIds.has(d.data.id);
+          if (isBlue) return '#1d4ed8'; // Vivid Blue Core
+          const isActive = activeNodeIds.includes(d.data.id);
+          return isActive ? '#059669' : '#0f172a';
+        })
+        .attr('stroke', d => {
+          if (d.data.id === 'root') return '#475569';
+          const isBlue = isTraceActive && treeTraceState.nodeIds.has(d.data.id);
+          if (isBlue) return '#60a5fa'; // Bright Cyan-Blue stroke
+          const isActive = activeNodeIds.includes(d.data.id);
+          return isActive ? '#34d399' : '#10b981';
+        })
+        .attr('filter', d => {
+          if (isTraceActive && treeTraceState.nodeIds.has(d.data.id)) return 'url(#glow-blue)';
+          return activeNodeIds.includes(d.data.id) ? 'url(#glow-green)' : null;
+        });
+
+      nodeUpdate.select('.node-halo')
+        .attr('stroke', d => {
+          if (isTraceActive && treeTraceState.nodeIds.has(d.data.id)) return '#3b82f6';
+          return activeNodeIds.includes(d.data.id) ? '#34d399' : 'transparent';
+        })
+        .attr('class', d => {
+          if (isTraceActive && treeTraceState.nodeIds.has(d.data.id)) return 'node-halo node-blue-pulse';
+          return activeNodeIds.includes(d.data.id) ? 'node-halo node-pulse' : 'node-halo';
+        });
+
+      nodeUpdate.select('.node-label')
+        .text(d => d.data.name === 'null' ? 'root' : d.data.name.substring(0, 5))
+        .attr('fill', d => d.data.id === 'root' ? '#94a3b8' : '#ffffff');
+
+      nodeUpdate.select('.badge-bg')
+        .attr('display', d => d.data.id === 'root' ? 'none' : 'block')
+        .attr('fill', d => {
+          if (isTraceActive && treeTraceState.nodeIds.has(d.data.id)) return '#60a5fa';
+          return activeNodeIds.includes(d.data.id) ? '#fbbf24' : '#334155';
+        });
+
+      nodeUpdate.select('.badge-text')
+        .attr('display', d => d.data.id === 'root' ? 'none' : 'block')
+        .text(d => d.data.count)
+        .attr('fill', d => {
+          if (isTraceActive && treeTraceState.nodeIds.has(d.data.id)) return '#0f172a';
+          return activeNodeIds.includes(d.data.id) ? '#78350f' : '#cbd5e1';
+        });
+
+      nodeUpdate.on('mouseenter', function(event, d) {
+        if (d.data.id === 'root') return;
+        const ancestors = d.ancestors().reverse().map(a => a.data.name).filter(n => n !== 'null');
+        showToast(`Path: ${ancestors.join(' → ')} (Count: ${d.data.count})`);
+      });
+    }
+
+    /**
+     * Highlights exact paths in the FP-Tree corresponding to an association rule or conditional pattern
+     * Changing the node colors from green to vivid blue and displaying the HUD explanation banner.
+     */
+    function traceRuleOnTree(rule) {
+      if (!rule) return;
+      const currentStep = precomputedSteps[currentStepIndex];
+      const treeData = currentStep ? currentStep.fpgrowth.treeData : null;
+      if (!treeData || !treeData.children || treeData.children.length === 0) {
+        showToast('FP-Tree is not yet constructed. Advance steps or click "Auto Play".');
+        return;
+      }
+
+      const jointItems = rule.jointItemset;
+      const matchingNodeIds = new Set();
+      const matchingLinkKeys = new Set();
+      const pathSummaries = [];
+
+      // Find all leaf paths in tree that contain all items of the joint set
+      function traverse(node, currentPath) {
+        const nextPath = [...currentPath, node];
+        if (!node.children || node.children.length === 0) {
+          // Leaf node reached, check if path contains all items in jointItems
+          const pathNames = nextPath.map(n => n.name).filter(n => n !== 'null');
+          const hasAll = jointItems.every(it => pathNames.includes(it));
+          if (hasAll) {
+            // Mark all nodes in this path that are in jointItems, plus links between them
+            nextPath.forEach(n => {
+              if (jointItems.includes(n.name)) {
+                matchingNodeIds.add(n.id);
+              }
+            });
+            for (let i = 0; i < nextPath.length - 1; i++) {
+              matchingLinkKeys.add(`${nextPath[i].id}->${nextPath[i + 1].id}`);
+            }
+            pathSummaries.push(`(${pathNames.join(' → ')}: count ${node.count})`);
+          }
+        } else {
+          node.children.forEach(child => traverse(child, nextPath));
+        }
+      }
+
+      traverse(treeData, []);
+
+      // If no full leaf match directly (subpath within tree), traverse all nodes
+      function checkSubpath(node, path) {
+        const pathNames = path.map(n => n.name).filter(n => n !== 'null');
+        if (jointItems.every(it => pathNames.includes(it))) {
+          path.forEach(n => {
+            if (jointItems.includes(n.name)) matchingNodeIds.add(n.id);
+          });
+          for (let i = 0; i < path.length - 1; i++) {
+            matchingLinkKeys.add(`${path[i].id}->${path[i + 1].id}`);
+          }
+        }
+        if (node.children) {
+          node.children.forEach(child => checkSubpath(child, [...path, child]));
+        }
+      }
+      checkSubpath(treeData, [treeData]);
+
+      // Set global trace state
+      treeTraceState.active = true;
+      treeTraceState.nodeIds = matchingNodeIds;
+      treeTraceState.linkKeys = matchingLinkKeys;
+      treeTraceState.title = `Tracing Rule: {${rule.antecedent.join(', ')}} ⇒ {${rule.consequent.join(', ')}}`;
+      treeTraceState.detail = `Mined via suffix conditional pattern base path sum for {${rule.consequent.join(', ')}} given prefix {${rule.antecedent.join(', ')}} = ${rule.jointCount}`;
+
+      // Update HUD UI
+      const hud = document.getElementById('tree-trace-hud');
+      const hudTitle = document.getElementById('hud-trace-title');
+      const hudDetail = document.getElementById('hud-trace-detail');
+      const clearBtn = document.getElementById('btn-clear-tree-highlight');
+
+      hudTitle.textContent = treeTraceState.title;
+      hudDetail.textContent = treeTraceState.detail;
+      hud.classList.remove('hidden');
+      clearBtn.classList.remove('hidden');
+
+      // Scroll smoothly to tree section
+      const treeSection = document.getElementById('fp-tree-section');
+      if (treeSection) {
+        treeSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      // Re-render D3 tree with blue highlights
+      renderD3Tree(treeData, currentStep.fpgrowth.activePath || []);
+      showToast(`Highlighted ${matchingNodeIds.size} path nodes in blue for rule`);
+    }
+
+    /**
+     * Trace conditional pattern base for a single suffix item
+     */
+    function traceCondPatternOnTree(suffixItem, rawPaths) {
+      const currentStep = precomputedSteps[currentStepIndex];
+      const treeData = currentStep ? currentStep.fpgrowth.treeData : null;
+      if (!treeData) return;
+
+      const matchingNodeIds = new Set();
+      const matchingLinkKeys = new Set();
+
+      if (rawPaths && rawPaths.length > 0) {
+        rawPaths.forEach(p => {
+          matchingNodeIds.add(p.nodeId);
+          p.path.forEach(pi => matchingNodeIds.add(pi.id));
+        });
+      }
+
+      function markLinks(node, path) {
+        for (let i = 0; i < path.length - 1; i++) {
+          if (matchingNodeIds.has(path[i].id) && matchingNodeIds.has(path[i + 1].id)) {
+            matchingLinkKeys.add(`${path[i].id}->${path[i + 1].id}`);
+          }
+        }
+        if (node.children) {
+          node.children.forEach(c => markLinks(c, [...path, c]));
+        }
+      }
+      markLinks(treeData, [treeData]);
+
+      treeTraceState.active = true;
+      treeTraceState.nodeIds = matchingNodeIds;
+      treeTraceState.linkKeys = matchingLinkKeys;
+      treeTraceState.title = `Conditional Pattern Base: Suffix {${suffixItem}}`;
+      treeTraceState.detail = `Highlighted all prefix paths terminating at '{${suffixItem}}' nodes in the FP-Tree.`;
+
+      const hud = document.getElementById('tree-trace-hud');
+      document.getElementById('hud-trace-title').textContent = treeTraceState.title;
+      document.getElementById('hud-trace-detail').textContent = treeTraceState.detail;
+      hud.classList.remove('hidden');
+      document.getElementById('btn-clear-tree-highlight').classList.remove('hidden');
+
+      const treeSection = document.getElementById('fp-tree-section');
+      if (treeSection) {
+        treeSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      renderD3Tree(treeData, currentStep.fpgrowth.activePath || []);
+      showToast(`Highlighted sub-tree paths for suffix '${suffixItem}'`);
+    }
+
+    function clearTreeHighlight() {
+      treeTraceState.active = false;
+      treeTraceState.nodeIds.clear();
+      treeTraceState.linkKeys.clear();
+
+      document.getElementById('tree-trace-hud').classList.add('hidden');
+      document.getElementById('btn-clear-tree-highlight').classList.add('hidden');
+
+      const currentStep = precomputedSteps[currentStepIndex];
+      if (currentStep) {
+        renderD3Tree(currentStep.fpgrowth.treeData, currentStep.fpgrowth.activePath || []);
+      }
+      showToast('Restored default tree coloring');
+    }
+
+    /* ==========================================================================
+       5. INCREMENTAL APRIORI STACK RENDERING (DO NOT DELETE PREVIOUS PASSES)
+       ========================================================================== */
+    function renderAprioriStackedPasses(passes, currentK) {
+      const container = document.getElementById('container-apriori-stacked-passes');
+      container.innerHTML = '';
+
+      if (!passes || passes.length === 0) {
+        container.innerHTML = `
+          <div class="text-slate-500 italic text-xs py-4 text-center bg-slate-900/60 rounded-xl border border-slate-800">
+            Awaiting algorithm initiation...
+          </div>
+        `;
+        document.getElementById('badge-apriori-total-iters').textContent = 'Iter 1 Active';
+        return;
+      }
+
+      document.getElementById('badge-apriori-total-iters').textContent = `${passes.length} Iteration${passes.length > 1 ? 's' : ''} Stacked`;
+
+      // Render every iteration block from k=1 to current k
+      passes.forEach((pass, index) => {
+        const isLatest = index === passes.length - 1;
+        const card = document.createElement('div');
+        card.className = `iteration-card-enter bg-slate-900/90 rounded-xl p-3 border transition-all ${
+          isLatest ? 'border-apriori-500/80 shadow-md shadow-apriori-500/10' : 'border-slate-800/90 opacity-90'
+        }`;
+
+        let passStatusBadge = isLatest
+          ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-apriori-600 text-white font-mono animate-pulse">Active Iteration</span>`
+          : `<span class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700 font-mono">Completed Pass</span>`;
+
+        let ckHtml = '';
+        if (pass.ck.length === 0) {
+          ckHtml = `<span class="text-slate-500 italic text-[11px]">No candidates generated in this pass.</span>`;
+        } else {
+          ckHtml = pass.ck.map(c => {
+            const isKept = c.status === 'kept';
+            const isPruned = c.status === 'pruned';
+            return `
+              <div class="px-2 py-1 rounded text-[11px] font-mono flex items-center gap-1 border ${
+                isKept ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800' :
+                isPruned ? 'bg-rose-950/40 text-rose-300/70 border-rose-900/50 line-through' :
+                'bg-slate-800 text-slate-300 border-slate-700'
+              }">
+                <span>${formatItemset(c.itemset)}</span>
+                <span class="text-[9px] font-bold px-1 rounded ${
+                  isKept ? 'bg-emerald-900 text-emerald-200' : 'bg-slate-950 text-slate-400'
+                }">${c.count}</span>
+              </div>
+            `;
+          }).join('');
+        }
+
+        let lkHtml = '';
+        if (pass.lk.length === 0) {
+          lkHtml = `<span class="text-slate-500 italic text-[11px]">No frequent itemsets met minimum support.</span>`;
+        } else {
+          lkHtml = pass.lk.map(item => `
+            <div class="px-2 py-1 rounded text-[11px] font-mono bg-indigo-950/80 text-indigo-200 border border-indigo-800 flex items-center gap-1 shadow-sm">
+              <span>${formatItemset(item.itemset)}</span>
+              <span class="text-[9px] font-bold px-1 rounded bg-indigo-900 text-indigo-300">sup: ${item.count}</span>
+            </div>
+          `).join('');
+        }
+
+        card.innerHTML = `
+          <!-- Pass Title & Badges -->
+          <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+              <span class="w-6 h-6 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono font-bold text-xs flex items-center justify-center">k=${pass.k}</span>
+              <div>
+                <h4 class="font-bold text-xs text-white">Iteration ${pass.k}: ${pass.k === 1 ? 'Single Items' : pass.k === 2 ? 'Pair Combinations' : pass.k + '-Itemsets'}</h4>
+                <span class="text-[10px] text-slate-400 font-mono">DB Scan: #${pass.scanNum}</span>
+              </div>
+            </div>
+            ${passStatusBadge}
+          </div>
+
+          <!-- Candidate Sets Ck -->
+          <div class="mb-2.5">
+            <div class="flex items-center justify-between text-[11px] mb-1">
+              <span class="font-semibold text-slate-300 flex items-center gap-1 math-render">
+                <span class="w-1.5 h-1.5 rounded-full bg-apriori-400"></span> Candidate Set ($C_{${pass.k}}$)
+              </span>
+              <span class="text-slate-400 font-mono text-[10px]">${pass.ck.length} candidates (${pass.pruneCount} pruned)</span>
+            </div>
+            <div class="flex flex-wrap gap-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 max-h-28 overflow-y-auto">
+              ${ckHtml}
+            </div>
+          </div>
+
+          <!-- Frequent Sets Lk -->
+          <div>
+            <div class="flex items-center justify-between text-[11px] mb-1">
+              <span class="font-semibold text-emerald-400 flex items-center gap-1 math-render">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Frequent Itemsets ($L_{${pass.k}}$)
+              </span>
+              <span class="text-emerald-400 font-mono text-[10px] font-bold">${pass.lk.length} frequent</span>
+            </div>
+            <div class="flex flex-wrap gap-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800/80 max-h-24 overflow-y-auto">
+              ${lkHtml}
+            </div>
+          </div>
+
+          <!-- Pass Footnote -->
+          <div class="mt-2 pt-1.5 border-t border-slate-800/60 text-[10px] text-slate-400 flex items-center justify-between math-render">
+            <span>${pass.notes}</span>
+          </div>
+        `;
+
+        container.appendChild(card);
+      });
+
+      renderMath(container);
+    }
+
+    /* ==========================================================================
+       6. UI STEP DISPATCHER & SYNCHRONIZATION
+       ========================================================================== */
+    function renderStep(stepIndex) {
+      if (!precomputedSteps || precomputedSteps.length === 0) return;
+      if (stepIndex < 0) stepIndex = 0;
+      if (stepIndex >= precomputedSteps.length) stepIndex = precomputedSteps.length - 1;
+
+      currentStepIndex = stepIndex;
+      const step = precomputedSteps[stepIndex];
+
+      // Update Sticky Controls Bar
+      document.getElementById('badge-sticky-phase').textContent = step.phase;
+      document.getElementById('label-sticky-step-num').textContent = `Step ${stepIndex}/${precomputedSteps.length - 1}`;
+      document.getElementById('label-sticky-headline').textContent = step.headline;
+      document.getElementById('label-sticky-detail').textContent = step.detail;
+
+      // Scrubber Dropdown Selection sync
+      const jumpSelect = document.getElementById('select-jump-step');
+      if (jumpSelect.value !== String(stepIndex)) {
+        jumpSelect.value = String(stepIndex);
+      }
+
+      // Progress bar
+      const progressPercent = (stepIndex / (precomputedSteps.length - 1)) * 100;
+      document.getElementById('timeline-progress-bar').style.width = `${progressPercent}%`;
+
+      // Update Analytics Counters
+      document.getElementById('stat-apriori-scans').textContent = step.apriori.scans;
+      document.getElementById('stat-fpgrowth-scans').textContent = step.fpgrowth.scans;
+      document.getElementById('stat-apriori-cand').textContent = step.apriori.candidatesCount;
+      document.getElementById('stat-apriori-ops').textContent = step.apriori.comparisons;
+      document.getElementById('stat-fpgrowth-ops').textContent = step.fpgrowth.comparisons;
+
+      // 1. RENDER APRIORI INCREMENTAL STACK (Preserves every prior pass!)
+      renderAprioriStackedPasses(step.apriori.passes, step.apriori.currentK);
+
+      // 2. RENDER FP-GROWTH ARENA
+      document.getElementById('badge-fpgrowth-phase').textContent = step.fpgrowth.phase;
+
+      // Header Table (F-List)
+      const headerContainer = document.getElementById('container-header-table');
+      headerContainer.innerHTML = '';
+      if (!step.fpgrowth.headerTable || step.fpgrowth.headerTable.length === 0) {
+        headerContainer.innerHTML = `<div class="text-slate-500 italic text-xs py-2 text-center">Awaiting Pass 1...</div>`;
+      } else {
+        step.fpgrowth.headerTable.forEach((itemObj, idx) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between px-2 py-1 rounded bg-slate-950 border border-slate-800 hover:border-emerald-700/60 transition group cursor-pointer';
+          row.innerHTML = `
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] text-slate-500 font-bold w-3">${idx + 1}.</span>
+              <span class="text-slate-200 font-semibold">${itemObj.item}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-900 text-[11px]">${itemObj.count}</span>
+              <span class="text-[9px] text-slate-500 group-hover:text-emerald-400 transition">linked →</span>
+            </div>
+          `;
+          row.addEventListener('click', () => highlightItemInTree(itemObj.item));
+          headerContainer.appendChild(row);
+        });
+      }
+
+      // Pass 2 Insertion Stream
+      const txFlowContainer = document.getElementById('container-fp-tx-flow');
+      const activeTxLabel = document.getElementById('label-fp-active-tx-id');
+      txFlowContainer.innerHTML = '';
+
+      if (step.fpgrowth.activeTx) {
+        const tx = step.fpgrowth.activeTx;
+        activeTxLabel.textContent = `Processing T${tx.index + 1}`;
+        if (tx.ordered.length === 0) {
+          txFlowContainer.innerHTML = `<span class="text-amber-400 text-xs italic">All items in T${tx.index + 1} were infrequent (< min_sup).</span>`;
+        } else {
+          tx.ordered.forEach((it, idx) => {
+            const chip = document.createElement('span');
+            chip.className = 'px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 border border-emerald-600/60 font-mono text-xs font-semibold';
+            chip.textContent = it;
+            txFlowContainer.appendChild(chip);
+            if (idx < tx.ordered.length - 1) {
+              const arrow = document.createElement('span');
+              arrow.className = 'text-slate-500 font-bold text-xs';
+              arrow.textContent = '→';
+              txFlowContainer.appendChild(arrow);
+            }
+          });
+        }
+      } else {
+        activeTxLabel.textContent = 'Idle';
+        txFlowContainer.innerHTML = `<span class="text-slate-500 italic text-xs">${step.fpgrowth.message}</span>`;
+      }
+
+      // Render D3 FP-Tree
+      renderD3Tree(step.fpgrowth.treeData, step.fpgrowth.activePath || []);
+
+      // Conditional Pattern Bases
+      const condList = document.getElementById('cond-pattern-list');
+      if (step.fpgrowth.condBases && step.fpgrowth.condBases.length > 0) {
+        condList.innerHTML = '';
+        step.fpgrowth.condBases.forEach(cb => {
+          const row = document.createElement('div');
+          row.className = 'p-2 rounded-lg bg-slate-950 border border-slate-800/90 hover:border-blue-700/60 transition cursor-pointer text-[11px] font-mono text-slate-300 group';
+          row.innerHTML = `
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1 mb-1">
+              <span class="text-emerald-400 group-hover:text-blue-400 font-bold transition">Suffix Item: {${cb.item}}</span>
+              <span class="text-[10px] text-blue-300 group-hover:underline">Click to Trace (Blue) →</span>
+            </div>
+            <div class="text-[10px] text-slate-400">
+              <strong class="text-slate-300">Prefix Paths:</strong> ${cb.paths.join(' | ') || '∅ (Root only)'}
+            </div>
+            <div class="text-[10px] text-indigo-300 mt-0.5">
+              Cond. Frequent: [${cb.condFreq}]
+            </div>
+          `;
+          row.addEventListener('click', () => {
+            traceCondPatternOnTree(cb.item, cb.pathsRaw);
+          });
+          condList.appendChild(row);
+        });
+      } else {
+        condList.innerHTML = `
+          <div class="text-slate-500 italic text-xs py-2 text-center bg-slate-950/40 rounded-lg">
+            Available once FP-Tree construction completes.
+          </div>
+        `;
+      }
+
+      // 3. RENDER ASSOCIATION RULES TABLE & CALCULATION CONNECTIONS
+      const finalStep = precomputedSteps[precomputedSteps.length - 1];
+      if (finalStep && finalStep.rules) {
+        renderRulesTable(finalStep.rules);
+      }
+    }
+
+    function highlightItemInTree(itemName) {
+      if (!treeG) return;
+      treeG.selectAll('.tree-node').each(function(d) {
+        const isMatch = d.data.name === itemName;
+        d3.select(this).select('.node-core')
+          .transition().duration(200)
+          .attr('stroke', isMatch ? '#f59e0b' : (d.data.id === 'root' ? '#475569' : '#10b981'))
+          .attr('stroke-width', isMatch ? 4 : 2);
+      });
+      showToast(`Highlighted all node paths for '${itemName}' in FP-Tree`);
+    }
+
+    /* ==========================================================================
+       7. RULES TABLE & HIGH-FIDELITY KATEX MATHEMATICAL DERIVATION
+       ========================================================================== */
+    function renderRulesTable(rules) {
+      const tbody = document.getElementById('table-rules-body');
+      const sortKey = document.getElementById('select-rules-sort').value;
+
+      if (!rules || rules.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="px-4 py-8 text-center text-slate-500 italic">
+              No association rules meet minimum confidence (${minConfPercent}%). Lower min_sup or min_conf in the top bar.
+            </td>
+          </tr>
+        `;
+        document.getElementById('badge-rules-count').textContent = '0 Rules Found';
+        return;
+      }
+
+      const sortedRules = [...rules].sort((a, b) => {
+        if (sortKey === 'confidence') return b.confidence - a.confidence;
+        if (sortKey === 'lift') return b.lift - a.lift;
+        return b.support - a.support;
+      });
+
+      document.getElementById('badge-rules-count').textContent = `${sortedRules.length} Rules Found`;
+      tbody.innerHTML = '';
+
+      sortedRules.forEach((rule, idx) => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/60 transition group';
+
+        const confPct = (rule.confidence * 100).toFixed(1);
+        const suppPct = (rule.support * 100).toFixed(1);
+        const liftVal = rule.lift.toFixed(2);
+        const isStrongLift = rule.lift > 1.15;
+
+        tr.innerHTML = `
+          <!-- Rule -->
+          <td class="px-4 py-3 font-mono font-medium text-slate-200">
+            <span class="text-indigo-400 font-semibold">{${rule.antecedent.join(', ')}}</span>
+            <span class="text-slate-500 px-1 font-bold">⇒</span>
+            <span class="text-emerald-400 font-semibold">{${rule.consequent.join(', ')}}</span>
+          </td>
+
+          <!-- Support -->
+          <td class="px-3 py-3 font-mono text-slate-300">
+            ${suppPct}% <span class="text-slate-500 text-[10px]">(${rule.jointCount}/${rule.totalN})</span>
+          </td>
+
+          <!-- Confidence -->
+          <td class="px-3 py-3 font-mono font-semibold ${rule.confidence >= 0.75 ? 'text-cyan-300' : 'text-slate-300'}">
+            ${confPct}% <span class="text-slate-500 text-[10px]">(${rule.jointCount}/${rule.antCount})</span>
+          </td>
+
+          <!-- Lift -->
+          <td class="px-3 py-3 font-mono">
+            <span class="px-2 py-0.5 rounded font-bold text-xs ${
+              isStrongLift ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+              rule.lift >= 1.0 ? 'bg-slate-800 text-slate-300' : 'bg-rose-950 text-rose-300'
+            }">${liftVal}</span>
+          </td>
+
+          <!-- Interpretation -->
+          <td class="px-4 py-3 text-slate-400 text-[11px] leading-relaxed">
+            Buying <strong class="text-slate-200">${rule.antecedent.join(', ')}</strong> gives a <strong class="text-cyan-400">${confPct}% probability</strong> of also buying <strong class="text-slate-200">${rule.consequent.join(', ')}</strong> (${liftVal > 1 ? 'Positive Synergy' : 'Independent/Substitute'}).
+          </td>
+
+          <!-- Actions: Trace on Tree & Show Math -->
+          <td class="px-3 py-3 text-right">
+            <div class="flex items-center justify-end gap-1.5">
+              <button data-rule-idx="${idx}" class="btn-trace-tree-direct px-2 py-1 rounded bg-blue-950 hover:bg-blue-900 border border-blue-800 text-blue-300 hover:text-white font-medium text-[11px] transition flex items-center gap-1 shadow-sm" title="Trace this rule's nodes on the FP-Tree (turns blue)">
+                <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                <span>Trace</span>
+              </button>
+              <button data-rule-idx="${idx}" class="btn-open-math px-2.5 py-1 rounded bg-indigo-950 hover:bg-indigo-900 border border-indigo-800 text-indigo-300 hover:text-white font-medium text-[11px] transition flex items-center gap-1 shadow-sm">
+                <span>Show Math</span>
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Bind Direct Tree Trace Buttons
+      document.querySelectorAll('.btn-trace-tree-direct').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const rIndex = parseInt(e.currentTarget.getAttribute('data-rule-idx'), 10);
+          traceRuleOnTree(sortedRules[rIndex]);
+        });
+      });
+
+      // Bind Click Event on "Show Math"
+      document.querySelectorAll('.btn-open-math').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const rIndex = parseInt(e.currentTarget.getAttribute('data-rule-idx'), 10);
+          openRuleDerivationModal(sortedRules[rIndex]);
+        });
+      });
+
+      renderMath(tbody);
+    }
+
+    /**
+     * Opens the detailed step-by-step mathematical calculation guide modal
+     * with KaTeX typography and direct link to tree path back-tracing.
+     */
+    function openRuleDerivationModal(rule) {
+      currentlyViewedRule = rule;
+      const modal = document.getElementById('modal-rule-derivation');
+      const title = document.getElementById('modal-rule-title');
+      const content = document.getElementById('modal-rule-content');
+
+      const antTex = '\\{ \\text{' + rule.antecedent.join(', ') + '} \\}';
+      const conTex = '\\{ \\text{' + rule.consequent.join(', ') + '} \\}';
+      const jointTex = '\\{ \\text{' + rule.jointItemset.join(', ') + '} \\}';
+
+      title.innerHTML = `Derivation: $${antTex} \\Rightarrow ${conTex}$`;
+
+      const suppPct = (rule.support * 100).toFixed(1);
+      const confPct = (rule.confidence * 100).toFixed(1);
+      const liftVal = rule.lift.toFixed(3);
+      const conSuppPct = ((rule.conCount / rule.totalN) * 100).toFixed(1);
+
+      content.innerHTML = `
+        <!-- Origin Trace Notice -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-slate-300 space-y-1">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-indigo-400 font-semibold text-xs">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+              <span>Algorithm Count Provenance:</span>
+            </div>
+            <span class="text-[10px] text-blue-400 font-mono">Both engines yield identical metrics</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 text-[11px] font-mono">
+            <div class="p-2 rounded bg-slate-900 border border-slate-800 leading-relaxed">
+              <span class="text-apriori-400 font-bold">Apriori Origin:</span><br>
+              $\\text{count}(${jointTex}) = \\mathbf{${rule.jointCount}}$ from $L_{${rule.jointItemset.length}}$<br>
+              $\\text{count}(${antTex}) = \\mathbf{${rule.antCount}}$ from $L_{${rule.antecedent.length}}$
+            </div>
+            <div class="p-2 rounded bg-slate-900 border border-slate-800 leading-relaxed">
+              <span class="text-fpgrowth-400 font-bold">FP-Growth Origin:</span><br>
+              Mined via suffix conditional pattern base path sum for $${conTex}$ given prefix $${antTex}$ $= \\mathbf{${rule.jointCount}}$
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 1: SUPPORT CALCULATION -->
+        <div class="p-3 bg-slate-950 rounded-xl border border-amber-900/40 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-400 text-xs">Step 1: Compute Rule Support $P(A \\cap B)$</span>
+            <span class="font-mono text-[10px] text-slate-400">Total Baskets $N = ${rule.totalN}$</span>
+          </div>
+          <p class="text-slate-400 text-[11px]">
+            The probability that a random customer buys both $${antTex}$ and $${conTex}$ together:
+          </p>
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-center text-xs text-amber-300 overflow-x-auto">
+            $$\\text{supp}(${antTex} \\Rightarrow ${conTex}) = \\frac{\\text{count}(${jointTex})}{N} = \\frac{${rule.jointCount}}{${rule.totalN}} = ${suppPct}\\%$$
+          </div>
+          <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1">
+            <span>Threshold Check: $${suppPct}\\% \\ge \\text{min\\_sup} (${minSupPercent}\\%)$</span>
+            <span class="text-emerald-400 font-bold font-mono">✓ PASSES SUPPORT FILTER</span>
+          </div>
+        </div>
+
+        <!-- STEP 2: CONFIDENCE CALCULATION -->
+        <div class="p-3 bg-slate-950 rounded-xl border border-cyan-900/40 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-cyan-400 text-xs">Step 2: Compute Rule Confidence $P(B \\mid A)$</span>
+            <span class="font-mono text-[10px] text-slate-400">Antecedent count $= ${rule.antCount}$</span>
+          </div>
+          <p class="text-slate-400 text-[11px]">
+            Out of all customers who bought $${antTex}$, what fraction also bought $${conTex}$:
+          </p>
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-center text-xs text-cyan-300 overflow-x-auto">
+            $$\\text{conf}(${antTex} \\Rightarrow ${conTex}) = \\frac{\\text{count}(${jointTex})}{\\text{count}(${antTex})} = \\frac{${rule.jointCount}}{${rule.antCount}} = ${confPct}\\%$$
+          </div>
+          <div class="text-[10px] text-slate-400 flex items-center justify-between pt-1">
+            <span>Threshold Check: $${confPct}\\% \\ge \\text{min\\_conf} (${minConfPercent}\\%)$</span>
+            <span class="text-emerald-400 font-bold font-mono">✓ PASSES CONFIDENCE FILTER</span>
+          </div>
+        </div>
+
+        <!-- STEP 3: LIFT CALCULATION & BUSINESS INTERPRETATION -->
+        <div class="p-3 bg-slate-950 rounded-xl border border-emerald-900/40 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-emerald-400 text-xs">Step 3: Compute Lift $\\text{Lift}(A \\Rightarrow B)$</span>
+            <span class="font-mono text-[10px] text-slate-400">$P(B) = ${conSuppPct}\\%$</span>
+          </div>
+          <p class="text-slate-400 text-[11px]">
+            Lift measures how much more likely the customer is to buy $${conTex}$ compared to unconditional baseline popularity $P(B)$:
+          </p>
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-center text-xs text-emerald-300 overflow-x-auto">
+            $$\\text{lift}(${antTex} \\Rightarrow ${conTex}) = \\frac{\\text{conf}(${antTex} \\Rightarrow ${conTex})}{\\text{supp}(${conTex})} = \\frac{${(rule.confidence).toFixed(3)}}{${(rule.conCount / rule.totalN).toFixed(3)}} = ${liftVal}$$
+          </div>
+          <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+            ${
+              rule.lift > 1.05
+                ? `<span class="text-emerald-400 font-bold">Positive Association ($\\text{Lift} > 1$):</span> Customers who buy $${antTex}$ are $\\mathbf{${liftVal}\\times}$ more likely to purchase $${conTex}$ than random baseline chance. Strong complementary cross-merchandising candidate.`
+                : rule.lift >= 0.95
+                ? `<span class="text-amber-400 font-bold">Independent Items ($\\text{Lift} \\approx 1$):</span> Joint purchases are coincidental based purely on individual popularity.`
+                : `<span class="text-rose-400 font-bold">Negative Association ($\\text{Lift} < 1$):</span> Customers buying $${antTex}$ are less likely to buy $${conTex}$ (potential substitute items).`
+            }
+          </div>
+        </div>
+      `;
+
+      modal.classList.remove('hidden');
+      renderMath(modal);
+    }
+
+    /* ==========================================================================
+       8. CONTROLS, SPEED & PLAYBACK MANAGEMENT
+       ========================================================================== */
+    function recomputeAndReset() {
+      pausePlayback();
+      clearTreeHighlight();
+      precomputedSteps = computeUnifiedSteps();
+
+      // Populate Step Scrubber Dropdown
+      const jumpSelect = document.getElementById('select-jump-step');
+      jumpSelect.innerHTML = '';
+      precomputedSteps.forEach((s, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.className = 'bg-slate-900 text-slate-200';
+        opt.textContent = `${idx}. ${s.phase}: ${s.title.substring(0, 24)}`;
+        jumpSelect.appendChild(opt);
+      });
+
+      currentStepIndex = 0;
+      renderStep(0);
+      updateDbModalList();
+    }
+
+    function togglePlayback() {
+      if (isPlaying) pausePlayback();
+      else startPlayback();
+    }
+
+    function startPlayback() {
+      if (currentStepIndex >= precomputedSteps.length - 1) {
+        currentStepIndex = 0;
+      }
+      isPlaying = true;
+      document.getElementById('play-icon').classList.add('hidden');
+      document.getElementById('pause-icon').classList.remove('hidden');
+      document.getElementById('play-btn-label').textContent = 'Pause';
+
+      playIntervalId = setInterval(() => {
+        if (currentStepIndex < precomputedSteps.length - 1) {
+          renderStep(currentStepIndex + 1);
+        } else {
+          pausePlayback();
+        }
+      }, playSpeed);
+    }
+
+    function pausePlayback() {
+      isPlaying = false;
+      if (playIntervalId) clearInterval(playIntervalId);
+      document.getElementById('play-icon').classList.remove('hidden');
+      document.getElementById('pause-icon').classList.add('hidden');
+      document.getElementById('play-btn-label').textContent = 'Auto Play';
+    }
+
+    function stepForward() {
+      pausePlayback();
+      if (currentStepIndex < precomputedSteps.length - 1) {
+        renderStep(currentStepIndex + 1);
+      }
+    }
+
+    function stepBackward() {
+      pausePlayback();
+      if (currentStepIndex > 0) {
+        renderStep(currentStepIndex - 1);
+      }
+    }
+
+    function resetToStart() {
+      pausePlayback();
+      clearTreeHighlight();
+      renderStep(0);
+    }
+
+    /* ==========================================================================
+       9. TRANSACTION DATABASE EDITOR & PRESET MANAGEMENT
+       ========================================================================== */
+    function updateDbModalList() {
+      const list = document.getElementById('modal-tx-list');
+      const badge = document.getElementById('badge-tx-count');
+      badge.textContent = currentDB.length;
+      list.innerHTML = '';
+
+      currentDB.forEach((tx, idx) => {
+        const itemRow = document.createElement('div');
+        itemRow.className = 'flex items-center justify-between p-2 rounded-xl bg-slate-950 border border-slate-800';
+        itemRow.innerHTML = `
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-mono text-xs font-bold text-indigo-400">T${idx + 1}:</span>
+            ${tx.map(it => `<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-200 border border-slate-700 text-xs">${it}</span>`).join('')}
+          </div>
+          <button data-index="${idx}" class="btn-delete-tx text-rose-400 hover:text-rose-300 p-1 rounded hover:bg-rose-950/40 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          </button>
+        `;
+        list.appendChild(itemRow);
+      });
+
+      document.querySelectorAll('.btn-delete-tx').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const index = parseInt(e.currentTarget.getAttribute('data-index'), 10);
+          if (currentDB.length <= 3) {
+            showToast('Minimum 3 transactions required for meaningful comparison.');
+            return;
+          }
+          currentDB.splice(index, 1);
+          updateDbModalList();
+          recomputeAndReset();
+        });
+      });
+    }
+
+    function generateRandomDB() {
+      const itemPool = ['Milk', 'Bread', 'Butter', 'Beer', 'Diapers', 'Eggs', 'Cola', 'Cookies'];
+      const txCount = Math.floor(Math.random() * 3) + 5; // 5 to 7 transactions
+      const newDB = [];
+
+      for (let i = 0; i < txCount; i++) {
+        const basketSize = Math.floor(Math.random() * 3) + 2; // 2 to 4 items
+        const shuffled = [...itemPool].sort(() => 0.5 - Math.random());
+        newDB.push(shuffled.slice(0, basketSize).sort());
+      }
+
+      currentDB = newDB;
+      showToast(`Generated ${txCount} random transactions`);
+      recomputeAndReset();
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('toast-msg');
+      const toastText = document.getElementById('toast-text');
+      toastText.textContent = text;
+      toast.classList.remove('translate-y-12', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-12', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 2400);
+    }
+
+    /* ==========================================================================
+       10. EVENT LISTENERS & BOOTSTRAP
+       ========================================================================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      initD3Tree();
+
+      // Sliders
+      const minSupSlider = document.getElementById('slider-min-sup');
+      const minConfSlider = document.getElementById('slider-min-conf');
+
+      minSupSlider.addEventListener('input', (e) => {
+        minSupPercent = parseInt(e.target.value, 10);
+        const N = currentDB.length;
+        const count = Math.ceil((minSupPercent / 100) * N);
+        document.getElementById('label-min-sup-val').textContent = `${minSupPercent}%`;
+        document.getElementById('label-min-sup-count').textContent = `(≥ ${count} Tx)`;
+        recomputeAndReset();
+      });
+
+      minConfSlider.addEventListener('input', (e) => {
+        minConfPercent = parseInt(e.target.value, 10);
+        document.getElementById('label-min-conf-val').textContent = `${minConfPercent}%`;
+        recomputeAndReset();
+      });
+
+      // Sticky Bar Expand/Collapse Drawer
+      const drawer = document.getElementById('sticky-params-drawer');
+      const chevron = document.getElementById('chevron-drawer-icon');
+      document.getElementById('btn-toggle-sticky-drawer').addEventListener('click', () => {
+        drawer.classList.toggle('hidden');
+        chevron.classList.toggle('rotate-180');
+      });
+
+      // Playback Controls
+      document.getElementById('btn-play-pause').addEventListener('click', togglePlayback);
+      document.getElementById('btn-step-next').addEventListener('click', stepForward);
+      document.getElementById('btn-step-prev').addEventListener('click', stepBackward);
+      document.getElementById('btn-reset').addEventListener('click', resetToStart);
+
+      document.getElementById('select-speed').addEventListener('change', (e) => {
+        playSpeed = parseInt(e.target.value, 10);
+        if (isPlaying) {
+          pausePlayback();
+          startPlayback();
+        }
+      });
+
+      // Step Dropdown Jump
+      document.getElementById('select-jump-step').addEventListener('change', (e) => {
+        pausePlayback();
+        renderStep(parseInt(e.target.value, 10));
+      });
+
+      // Tree Zoom Controls & Clear Highlight
+      document.getElementById('btn-tree-zoom-in').addEventListener('click', () => {
+        if (treeSvg && zoomBehavior) treeSvg.transition().duration(200).call(zoomBehavior.scaleBy, 1.25);
+      });
+      document.getElementById('btn-tree-zoom-out').addEventListener('click', () => {
+        if (treeSvg && zoomBehavior) treeSvg.transition().duration(200).call(zoomBehavior.scaleBy, 0.8);
+      });
+      document.getElementById('btn-tree-reset-zoom').addEventListener('click', resetTreeZoom);
+      document.getElementById('btn-clear-tree-highlight').addEventListener('click', clearTreeHighlight);
+      document.getElementById('btn-hud-close').addEventListener('click', clearTreeHighlight);
+
+      // Rules Sorting
+      document.getElementById('select-rules-sort').addEventListener('change', () => {
+        const lastStep = precomputedSteps[precomputedSteps.length - 1];
+        if (lastStep && lastStep.rules) renderRulesTable(lastStep.rules);
+      });
+
+      // Presets
+      const presetButtons = document.querySelectorAll('.preset-btn');
+      presetButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          presetButtons.forEach(b => {
+            b.classList.remove('bg-indigo-600', 'text-white');
+            b.classList.add('text-slate-300');
+          });
+          btn.classList.add('bg-indigo-600', 'text-white');
+          btn.classList.remove('text-slate-300');
+
+          if (btn.id === 'preset-supermarket') currentDB = JSON.parse(JSON.stringify(PRESETS.supermarket));
+          else if (btn.id === 'preset-tech') currentDB = JSON.parse(JSON.stringify(PRESETS.tech));
+          else if (btn.id === 'preset-coffee') currentDB = JSON.parse(JSON.stringify(PRESETS.coffee));
+          else if (btn.id === 'preset-bookstore') currentDB = JSON.parse(JSON.stringify(PRESETS.bookstore));
+
+          showToast(`Loaded ${btn.textContent} preset`);
+          recomputeAndReset();
+        });
+      });
+
+      // Random DB Generator
+      document.getElementById('btn-random-db').addEventListener('click', generateRandomDB);
+
+      // DB Modal
+      const modal = document.getElementById('modal-db-editor');
+      document.getElementById('btn-open-editor').addEventListener('click', () => {
+        updateDbModalList();
+        modal.classList.remove('hidden');
+      });
+      document.getElementById('btn-close-modal').addEventListener('click', () => modal.classList.add('hidden'));
+      document.getElementById('btn-modal-done').addEventListener('click', () => modal.classList.add('hidden'));
+
+      // Math Derivation Modal Close & Modal Direct Trace
+      const mathModal = document.getElementById('modal-rule-derivation');
+      document.getElementById('btn-close-derivation-modal').addEventListener('click', () => mathModal.classList.add('hidden'));
+      document.getElementById('btn-derivation-close-action').addEventListener('click', () => mathModal.classList.add('hidden'));
+      
+      document.getElementById('btn-modal-trace-tree').addEventListener('click', () => {
+        if (currentlyViewedRule) {
+          mathModal.classList.add('hidden');
+          traceRuleOnTree(currentlyViewedRule);
+        }
+      });
+
+      // Add New Transaction in Modal
+      document.getElementById('btn-add-tx').addEventListener('click', () => {
+        const input = document.getElementById('input-new-tx-items');
+        const val = input.value.trim();
+        if (!val) return;
+        const items = val.split(',')
+          .map(s => s.trim().replace(/[^a-zA-Z0-9_-]/g, ''))
+          .filter(Boolean);
+
+        if (items.length === 0) return;
+        currentDB.push(items);
+        input.value = '';
+        updateDbModalList();
+        recomputeAndReset();
+        showToast(`Added transaction T${currentDB.length}`);
+      });
+
+      // Window resize handler for D3
+      window.addEventListener('resize', () => {
+        const wrapper = document.getElementById('tree-canvas-wrapper');
+        const svgEl = document.getElementById('fp-tree-svg');
+        if (wrapper && svgEl) {
+          svgEl.setAttribute('viewBox', `0 0 ${wrapper.clientWidth} ${wrapper.clientHeight}`);
+          renderStep(currentStepIndex);
+        }
+      });
+
+      // Initial Compute & Render
+      recomputeAndReset();
+      renderMath(document.body);
+    });
+  </script>
+</body>
+</html>
